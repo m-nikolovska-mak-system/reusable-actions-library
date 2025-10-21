@@ -1,14 +1,29 @@
-# Reusable Actions Library
+# Reusable GitHub Workflows Library
 
-This repository contains a collection of **reusable GitHub Actions and workflow templates** designed to improve automation, consistency, and efficiency across multiple repositories.  
-It includes workflows for Teams notifications, branch naming validation, automated releases, and other CI/CD utilities.  
-The goal is to build a centralized internal library that simplifies common DevOps and workflow tasks.
+This repository contains reusable GitHub Actions workflows that can be called from other repositories using the `workflow_call` trigger.
 
+## 🧩 Workflows
 
-## Available Workflows
-| Workflow | Description | Example Path |
-|-----------|--------------|--------------|
-| `teams-notify.yml` | Sends notifications to Microsoft Teams on changes | `.github/workflows/teams-notify.yml` |
-| `branch-name-validate.yml` | Validates branch naming conventions | `.github/workflows/branch-name-validate.yml` |
-| `create-release.yml` | Automates GitHub release creation | `.github/workflows/create-release.yml` |
+### 🟦 Teams Notification Template
 
+**File:** `.github/workflows/teams-notification.yml`  
+**Description:** Sends a Microsoft Teams notification when changes are detected in a repository.
+
+#### Usage
+
+In your target repository, create a workflow that calls this one:
+
+```yaml
+name: Notify Teams on Changes
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  notify:
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/teams-notification.yml@main
+    with:
+      notification_title: '🚀 New Changes Detected'
+      action_required_message: 'Please review new changes.'
+    secrets:
+      teams_webhook_url: ${{ secrets.TEAMS_WEBHOOK_URL }}
