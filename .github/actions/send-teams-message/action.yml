@@ -31,7 +31,7 @@ runs:
     - name: Send Teams Adaptive Card
       shell: bash
       run: |
-        bash ${{ github.action_path }}/send-teams-message.sh \
+        bash "${{ github.action_path }}/send-teams-message.sh" \
           "${{ inputs.webhook_url }}" \
           "${{ inputs.title }}" \
           "${{ inputs.message }}" \
