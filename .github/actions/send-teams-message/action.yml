@@ -4,18 +4,22 @@ description: 'Sends a minimal Microsoft Teams notification'
 inputs:
   webhook_url:
     description: 'Microsoft Teams webhook URL'
-    required: true  
-title:
+    required: true
+  title:
+    description: 'Title of the message (optional)'
     required: false
   message:
+    description: 'Message to display'
     required: true
   color:
+    description: 'Color (optional)'
     required: false
   show_files:
+    description: 'Show changed files (optional)'
     required: false
   changed_files:
+    description: 'List of changed files (optional)'
     required: false
-
 
 runs:
   using: 'composite'
@@ -33,15 +37,18 @@ runs:
           exit 1
         fi
 
-        # Create simple payload JSON
+        # Optional: escape quotes in message
+        SAFE_MSG=$(echo "$MSG" | sed 's/"/\\"/g')
+
+        # Create minimal payload JSON
         cat > /tmp/payload.json <<EOF
-        {
-          "@type": "MessageCard",
-          "@context": "http://schema.org/extensions",
-          "summary": "Notification",
-          "text": "${MSG}"
-        }
-        EOF
+{
+  "@type": "MessageCard",
+  "@context": "http://schema.org/extensions",
+  "summary": "Notification",
+  "text": "${SAFE_MSG}"
+}
+EOF
 
         echo "📋 Payload preview:"
         cat /tmp/payload.json
