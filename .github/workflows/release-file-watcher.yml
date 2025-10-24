@@ -27,6 +27,9 @@ on:
         required: false
         type: boolean
         default: false
+      link_url:
+        required: false
+        type: string
     secrets:
       teams_webhook_url:
         description: 'Microsoft Teams webhook URL'
@@ -61,6 +64,8 @@ jobs:
           color: ${{ inputs.card_color }}
           show_files: ${{ inputs.show_changed_files }}
           changed_files: ${{ steps.check.outputs.changed_files }}
+          link_url: ${{ inputs.link_url }}
+
       
       - name: Log result
         run: |
