@@ -1,1 +1,29 @@
-test
+name: Release File Watcher
+
+on:
+  workflow_call:
+    inputs:
+      watched_file:
+        required: true
+        type: string
+      notification_title:
+        required: true
+        type: string
+      notification_message:
+        required: false
+        type: string
+        default: '⚠️ Changes detected that may require a new release.'
+    secrets:
+      teams_webhook_url:
+        required: true
+
+jobs:
+  notify:
+    uses: ./.github/workflows/send-teams-notification.yml
+    with:
+      watched_path: ${{ inputs.watched_file }}
+      notification_title: ${{ inputs.notification_title }}
+      notification_message: ${{ inputs.notification_message }}
+      card_color: 'Good'
+    secrets:
+      teams_webhook_url: ${{ secrets.teams_webhook_url }}
