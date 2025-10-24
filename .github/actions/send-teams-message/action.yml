@@ -24,7 +24,56 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Send minimal Teams notification
+    - name: Send Adaptive Card to Teams
       shell: bash
       run: |
-        echo "Test"
+        set -e
+
+        WEBHOOK="${{ inputs.webhook_url }}"
+        TITLE="${{ inputs.title }}"
+        MESSAGE="${{ inputs.message }}"
+
+        if [ -z "$WEBHOOK" ]; then
+          echo "❌ Missing webhook_url input"
+          exit 1
+        fi
+
+        echo "📤 Sending Adaptive Card to Microsoft Teams..."
+
+        # Create Adaptive Card JSON payload
+        cat > payload.json <<EOF
+        {
+          "attachments": [
+            {
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
+                  { "type": "TextBlock", "text": "🚀 ${TITLE}", "weight": "Bolder", "size": "Medium" },
+                  { "type": "TextBlock", "text": "${MESSAGE}", "wrap": true }
+                ]
+              }
+            }
+          ]
+        }
+        EOF
+
+        # Print payload for debugging
+        echo "📋 Payload:"
+        cat payload.json
+        echo ""
+
+        # Send request
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          -H "Content-Type: application/json" \
+          -d @payload.json \
+          "$WEBHOOK")
+
+        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "202" ]; then
+          echo "✅ Adaptive Card sent successfully!"
+        else
+          echo "❌ Failed with HTTP $HTTP_CODE"
+          exit 1
+        fi
