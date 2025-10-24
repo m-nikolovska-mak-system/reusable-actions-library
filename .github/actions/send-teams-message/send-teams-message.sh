@@ -20,7 +20,32 @@ if [ "$SHOW_FILES" == "true" ] && [ -n "$CHANGED_FILES" ]; then
   FILES_JSON="${FILES_JSON%,}"  
 fi
 
-# Build the Adaptive Card payload safely
+BODY_JSON="[
+  {
+    \"type\": \"TextBlock\",
+    \"text\": \"${TITLE:-GitHub Notification}\",
+    \"weight\": \"Bolder\",
+    \"size\": \"Large\",
+    \"color\": \"Accent\",
+    \"wrap\": true
+  },
+  {
+    \"type\": \"TextBlock\",
+    \"text\": \"${MESSAGE}\",
+    \"wrap\": true
+  },
+  {
+    \"type\": \"TextBlock\",
+    \"text\": \"🕒 Timestamp: ${TIMESTAMP}\",
+    \"wrap\": true
+  }"
+
+if [ -n "$FILES_JSON" ]; then
+  BODY_JSON="${BODY_JSON}, { \"type\": \"Container\", \"items\": [ $FILES_JSON ] }"
+fi
+
+BODY_JSON="${BODY_JSON}]"
+
 read -r -d '' PAYLOAD <<EOF
 {
   "type": "message",
@@ -31,27 +56,7 @@ read -r -d '' PAYLOAD <<EOF
         "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
         "type": "AdaptiveCard",
         "version": "1.4",
-        "body": [
-          {
-            "type": "TextBlock",
-            "text": "${TITLE:-GitHub Notification}",
-            "weight": "Bolder",
-            "size": "Large",
-            "color": "Accent",
-            "wrap": true
-          },
-          {
-            "type": "TextBlock",
-            "text": "${MESSAGE}",
-            "wrap": true
-          },
-          {
-            "type": "TextBlock",
-            "text": "🕒 Timestamp: ${TIMESTAMP}",
-            "wrap": true
-          }
-          $( [ -n "$FILES_JSON" ] && echo ", { \"type\": \"Container\", \"items\": [ $FILES_JSON ] }" )
-        ],
+        "body": $BODY_JSON,
         "actions": [
           {
             "type": "Action.OpenUrl",
