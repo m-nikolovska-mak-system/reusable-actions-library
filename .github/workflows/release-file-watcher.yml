@@ -27,7 +27,7 @@ jobs:
     with:
       watched_path: ${{ inputs.watched_file }}
       notification_title: ${{ inputs.notification_title }}
-      action_required_message: ${{ inputs.notification_message }}
+      notification_message: ${{ inputs.notification_message }}
       card_color: "Good"
     secrets:
       teams_webhook_url: ${{ secrets.teams_webhook_url }}
