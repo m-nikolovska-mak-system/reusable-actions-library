@@ -4,26 +4,30 @@ on:
   workflow_call:
     inputs:
       watched_file:
+        description: "File or directory path to monitor"
         required: true
         type: string
       notification_title:
+        description: "Title for Teams notification"
         required: true
         type: string
       notification_message:
+        description: "Message displayed in the Teams card"
         required: false
         type: string
-        default: '⚠️ Changes detected that may require a new release.'
+        default: "⚠️ Changes detected that may require a new release."
     secrets:
       teams_webhook_url:
+        description: "Microsoft Teams webhook URL"
         required: true
 
 jobs:
   notify:
-    uses: ./.github/workflows/send-teams-notification.yml
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/send-teams-notification.yml@main
     with:
       watched_path: ${{ inputs.watched_file }}
       notification_title: ${{ inputs.notification_title }}
-      notification_message: ${{ inputs.notification_message }}
-      card_color: 'Good'
+      action_required_message: ${{ inputs.notification_message }}
+      card_color: "Good"
     secrets:
       teams_webhook_url: ${{ secrets.teams_webhook_url }}
