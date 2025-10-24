@@ -1,0 +1,34 @@
+name: Check for File Changes
+
+on:
+  workflow_call:
+    inputs:
+      watched_file:
+        description: "File or directory to monitor"
+        required: true
+        type: string
+    outputs:
+      changed:
+        description: "True if watched file changed"
+        value: ${{ jobs.check.outputs.changed }}
+      changed_files:
+        description: "List of changed files"
+        value: ${{ jobs.check.outputs.changed_files }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+      changed_files: ${{ steps.diff.outputs.changed_files }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check file changes
+        id: diff
+        uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/check-file-changes@main
+        with:
+          target_file: ${{ inputs.watched_file }}
