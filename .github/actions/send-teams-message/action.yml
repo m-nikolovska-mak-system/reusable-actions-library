@@ -84,10 +84,10 @@ runs:
                     "wrap": true
                   },
                   $FILE_BLOCK
-                  {
-                    "type": "                    "text": "🔗 [View Commit](https://PO/commit/$SHA",
-                    "wrap": true
-                  },
+               {
+                  "type": "TextBlock",
+                  "text": "🔗 [View Commit](https://github.com/$REPO/commitp": true
+                },
                   {
                     "type": "TextBlock",
                     "text": "🕒 $TIMESTAMP",
