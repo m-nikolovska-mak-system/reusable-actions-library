@@ -24,58 +24,18 @@ inputs:
     description: 'URL for more details (e.g. commit or release link)'
     required: false
 
+
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-    - name: Send Adaptive Card to Teams
+    - name: Send Teams Adaptive Card
       shell: bash
       run: |
-        TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-
-        # Prepare list of changed files
-        FILES_JSON=""
-        if [ -n "${{ inputs.changed_files }}" ]; then
-          IFS=$'\n'
-          for file in ${{ inputs.changed_files }}; do
-            FILES_JSON="${FILES_JSON}{\"type\": \"TextBlock\", \"text\": \"• $file\", \"spacing\": \"None\"},"
-          done
-          unset IFS
-        fi
-
-        # Build JSON payload for Adaptive Card
-        PAYLOAD=$(cat <<EOF
-        {
-          "@type": "MessageCard",
-          "@context": "https://schema.org/extensions",
-          "themeColor": "${{ inputs.color }}",
-          "summary": "${{ inputs.title }}",
-          "sections": [{
-            "activityTitle": "**${{ inputs.title }}**",
-            "activitySubtitle": "${{ inputs.message }}",
-            "facts": [
-              { "name": "Timestamp", "value": "$TIMESTAMP" }
-            ],
-            "markdown": true
-          },
-          {
-            "text": "**Changed files:**",
-            "potentialAction": []
-          }],
-          "potentialAction": [
-            {
-              "@type": "OpenUri",
-              "name": "View Details",
-              "targets": [{ "os": "default", "uri": "${{ inputs.link_url }}" }]
-            }
-          ]
-        }
-        EOF
-        )
-
-        # Inject changed files into card
-        if [ -n "$FILES_JSON" ]; then
-          PAYLOAD=$(echo "$PAYLOAD" | jq --argjson files "[${FILES_JSON%,}]" '.sections[1].potentialAction += $files')
-        fi
-
-        # Send to Teams
-        curl -H "Content-Type: application/json" -d "$PAYLOAD" "${{ inputs.webhook_url }}"
+        bash ${{ github.action_path }}/send-teams-message.sh \
+          "${{ inputs.webhook_url }}" \
+          "${{ inputs.title }}" \
+          "${{ inputs.message }}" \
+          "${{ inputs.color }}" \
+          "${{ inputs.show_files }}" \
+          "${{ inputs.changed_files }}" \
+          "${{ inputs.link_url }}"
