@@ -1,1 +1,47 @@
-test
+name: Teams Notification Template
+
+on:
+  workflow_call:
+    inputs:
+      notification_title:
+        required: true
+        type: string
+      notification_message:
+        required: false
+        type: string
+        default: '⚠️ Reminder: changes detected that may require action'
+      card_color:
+        required: false
+        type: string
+        default: 'Accent'
+      watched_path:
+        required: false
+        type: string
+        default: ''
+    secrets:
+      teams_webhook_url:
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for file changes
+        id: diff
+        uses: ./.github/actions/check-file-changes
+        with:
+          target_file: ${{ inputs.watched_path }}
+
+      - name: Send Teams message
+        if: steps.diff.outputs.changed == 'true'
+        uses: ./.github/actions/send-teams-message
+        with:
+          webhook_url: ${{ secrets.teams_webhook_url }}
+          title: ${{ inputs.notification_title }}
+          message: ${{ inputs.notification_message }}
+          color: ${{ inputs.card_color }}
+          files: ${{ steps.diff.outputs.changed_files }}
