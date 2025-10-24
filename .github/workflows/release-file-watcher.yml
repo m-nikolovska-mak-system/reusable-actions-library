@@ -4,30 +4,68 @@ on:
   workflow_call:
     inputs:
       watched_file:
-        description: "File or directory path to monitor"
+        description: 'File or directory path to monitor (e.g., src/App.java)'
         required: true
         type: string
       notification_title:
-        description: "Title for Teams notification"
-        required: true
-        type: string
-      notification_message:
-        description: "Message displayed in the Teams card"
+        description: 'Title of the Teams notification'
         required: false
         type: string
-        default: "⚠️ Changes detected that may require a new release."
+        default: '🚀 Watched File Changed in Release'
+      notification_message:
+        description: 'Message to display in the notification'
+        required: false
+        type: string
+        default: '⚠️ The watched file has been modified in this release'
+      card_color:
+        description: 'Card color (Accent, Good, Warning, Attention)'
+        required: false
+        type: string
+        default: 'Warning'
+      show_changed_files:
+        description: 'Show all changed files in notification'
+        required: false
+        type: boolean
+        default: false
     secrets:
       teams_webhook_url:
-        description: "Microsoft Teams webhook URL"
+        description: 'Microsoft Teams webhook URL'
         required: true
 
 jobs:
-  notify:
-    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/send-teams-notification.yml@main
-    with:
-      watched_path: ${{ inputs.watched_file }}
-      notification_title: ${{ inputs.notification_title }}
-      notification_message: ${{ inputs.notification_message }}
-      card_color: "Good"
-    secrets:
-      teams_webhook_url: ${{ secrets.teams_webhook_url }}
+  check-and-notify:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Fetch all tags
+        run: git fetch --tags --force
+      
+      - name: Check if watched file changed
+        id: check
+        uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/check-file-changes@main
+        with:
+          target_file: ${{ inputs.watched_file }}
+      
+      - name: Send Teams notification
+        if: steps.check.outputs.changed == 'true'
+        uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/send-teams-message@main
+        with:
+          webhook_url: ${{ secrets.teams_webhook_url }}
+          title: ${{ inputs.notification_title }}
+          message: ${{ inputs.notification_message }}
+          color: ${{ inputs.card_color }}
+          show_files: ${{ inputs.show_changed_files }}
+          changed_files: ${{ steps.check.outputs.changed_files }}
+      
+      - name: Log result
+        run: |
+          if [ "${{ steps.check.outputs.changed }}" = "true" ]; then
+            echo "✅ File '${{ inputs.watched_file }}' changed - notification sent!"
+          else
+            echo "ℹ️ File '${{ inputs.watched_file }}' not changed - skipping notification"
+          fi
