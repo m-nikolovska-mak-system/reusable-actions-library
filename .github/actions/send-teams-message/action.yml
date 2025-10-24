@@ -1,106 +1,22 @@
-name: 'Send Microsoft Teams Message'
-description: 'Posts an Adaptive Card notification to a Microsoft Teams channel'
+name: "Send Microsoft Teams Message"
+description: "Sends a simple text message to a Teams channel"
 
 inputs:
   webhook_url:
-    description: 'Microsoft Teams incoming webhook URL'
-    required: true
-  title:
-    description: 'Title of the notification'
+    description: "Microsoft Teams webhook URL"
     required: true
   message:
-    description: 'Main message content'
+    description: "Message text to send"
     required: true
-  color:
-    description: 'Card color (Accent, Good, Warning, Attention)'
-    required: false
-    default: 'Accent'
-  files:
-    description: 'Optional list of changed files'
-    required: false
-    default: ''
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Send Teams message
       shell: bash
       run: |
-  set -euo pipefail
-  echo "📢 Sending Teams message..."
-
-  WEBHOOK="${{ inputs.webhook_url }}"
-  TITLE="${{ inputs.title }}"
-  MESSAGE="${{ inputs.message }}"
-  COLOR="${{ inputs.color }}"
-  FILES="${{ inputs.files }}"
-  REPO="${{ github.repository }}"
-  ACTOR="${{ github.actor }}"
-  SHA="${{ github.sha }}"
-  SHORT_SHA="${SHA:0:7}"
-  BRANCH="${{ github.ref_name }}"
-  TIMESTAMP=$(TZ='Europe/Belgrade' date +"%Y-%m-%d %H:%M %Z")
-
-  FILE_BLOCK=""
-  if [ -n "$FILES" ]; then
-    FILE_BLOCK=$(cat <<EOF
-    {
-      "type": "TextBlock",
-      "text": "📂 **Files Changed:**",
-      "weight": "Bolder",
-      "spacing": "Medium"
-    },
-    {
-      "type": "TextBlock",
-      "text": "$FILES",
-      "fontType": "Monospace",
-      "wrap": true
-    },
-EOF
-    )
-  fi
-
-  PAYLOAD=$(cat <<EOF
-  {
-    "type": "message",
-    "attachments": [
-      {
-        "contentType": "application/vnd.microsoft.card.adaptive",
-        "content": {
-          "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-          "type": "AdaptiveCard",
-          "version": "1.4",
-          "body": [
-            {
-              "type": "TextBlock",
-              "text": "$TITLE",
-              "weight": "Bolder",
-              "size": "Large",
-              "color": "$COLOR"
-            },
-            {
-              "type": "TextBlock",
-              "text": "$MESSAGE",
-              "wrap": true
-            },
-            $FILE_BLOCK
-            {
-              "type": "TextBlock",
-              "text": "🔗 [ttps://github.com/$PO/commit/$SHA",
-              "wrap": true
-            },
-            {
-              "type": "TextBlock",
-              "text": "🕒 $TIMESTAMP",
-              "wrap": true
-            }
-          ]
-        }
-      }
-    ]
-  }
-EOF
-  )
-
-  curl -s -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK"
-  echo "✅ Teams message sent"
+        echo "📢 Sending message to Teams..."
+        curl -s -H 'Content-Type: application/json' \
+          -d "{\"text\": \"${{ inputs.message }}\"}" \
+          "${{ inputs.webhook_url }}"
+        echo "✅ Teams message sent."
