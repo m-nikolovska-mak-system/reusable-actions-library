@@ -31,14 +31,14 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Detect file changes
+    - name: Detect file or directory changes
       id: check
       shell: bash
       run: |
         set -e
         echo "🔍 Checking if '${{ inputs.target_file }}' changed..."
         
-        TARGET_FILE="${{ inputs.target_file }}"
+        TARGET="${{ inputs.target_file }}"
         FROM_REF="${{ inputs.from_ref }}"
         TO_REF="${{ inputs.to_ref }}"
         
@@ -49,18 +49,18 @@ runs:
         
         # Determine FROM reference
         if [ -z "$FROM_REF" ]; then
-          # Try to get previous tag
           CURRENT_TAG="${{ github.event.release.tag_name }}"
           if [ -n "$CURRENT_TAG" ]; then
-            echo "📌 Current tag: $CURRENT_TAG"
-            FROM_REF=$(git tag --sort=-creatordate | grep -A1 "^${CURRENT_TAG}$" | tail -n1 || echo "")
-            
-            if [ -z "$FROM_REF" ] || [ "$FROM_REF" = "$CURRENT_TAG" ]; then
+            # Get previous tag in chronological order
+            PREV_TAG=$(git tag --sort=-creatordate | grep -B1 "^${CURRENT_TAG}$" | head -n1 || echo "")
+            if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURRENT_TAG" ]; then
               echo "⚠️ No previous tag found - comparing against initial commit"
               FROM_REF=$(git rev-list --max-parents=0 HEAD)
+            else
+              FROM_REF="$PREV_TAG"
             fi
           else
-            # Fallback: compare with HEAD~1
+            # Fallback: compare with previous commit
             FROM_REF="HEAD~1"
           fi
         fi
@@ -79,15 +79,17 @@ runs:
           exit 0
         fi
         
+        # Set changed_files output
         echo "changed_files<<EOF" >> $GITHUB_OUTPUT
         echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
         
-        # Check if target file/path is in changed files
-        if echo "$CHANGED_FILES" | grep -q "^${TARGET_FILE}"; then
-          echo "✅ Target file '$TARGET_FILE' WAS changed!"
+        # Check if target file or any file inside target directory changed
+        if echo "$CHANGED_FILES" | grep -qE "^${TARGET}(/|$)"; then
+          echo "✅ Target '$TARGET' WAS changed!"
           echo "changed=true" >> $GITHUB_OUTPUT
         else
-          echo "ℹ️ Target file '$TARGET_FILE' was NOT changed"
+          echo "ℹ️ Target '$TARGET' was NOT changed"
           echo "changed=false" >> $GITHUB_OUTPUT
         fi
+
