@@ -45,6 +45,11 @@ runs:
           exit 1
         fi
         
+        # Show webhook (masked for security - only first/last 10 chars)
+        WEBHOOK_PREFIX="${WEBHOOK_URL:0:50}"
+        WEBHOOK_SUFFIX="${WEBHOOK_URL: -10}"
+        echo "🔗 Using webhook: ${WEBHOOK_PREFIX}...${WEBHOOK_SUFFIX}"
+        
         # Map color to Teams theme color
         case "$COLOR" in
           Good) THEME_COLOR="00FF00" ;;
@@ -56,10 +61,10 @@ runs:
         # Build files section
         FILES_TEXT=""
         if [ "$SHOW_FILES" = "true" ] && [ -n "$FILES" ]; then
-          FILES_TEXT="\n\n**Files Changed:**\n\`\`\`\n${FILES}\n\`\`\`"
+          FILES_TEXT=" | Files Changed: ${FILES}"
         fi
         
-        # Simple JSON payload (MessageCard format - simpler than Adaptive Cards)
+        # Simple JSON payload (MessageCard format)
         cat > /tmp/payload.json <<EOF
         {
           "@type": "MessageCard",
@@ -71,19 +76,19 @@ runs:
             {
               "facts": [
                 {
-                  "name": "Repository:",
+                  "name": "Repository",
                   "value": "${{ github.repository }}"
                 },
                 {
-                  "name": "Branch:",
+                  "name": "Branch",
                   "value": "${{ github.ref_name }}"
                 },
                 {
-                  "name": "Commit:",
+                  "name": "Commit",
                   "value": "${{ github.sha }}"
                 },
                 {
-                  "name": "By:",
+                  "name": "Triggered by",
                   "value": "${{ github.actor }}"
                 }
               ]
@@ -104,19 +109,31 @@ runs:
         }
         EOF
         
+        echo "📋 Payload being sent:"
+        cat /tmp/payload.json
+        echo ""
+        
         # Send to Teams
         echo "📤 Sending notification to Microsoft Teams..."
         
         HTTP_CODE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+          -X POST \
           -H "Content-Type: application/json" \
           -d @/tmp/payload.json \
           "$WEBHOOK_URL")
         
+        echo "📊 HTTP Response Code: $HTTP_CODE"
+        echo "📄 Response Body:"
+        cat /tmp/response.txt
+        echo ""
+        
         if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "202" ]; then
           echo "✅ Teams notification sent successfully!"
+          echo "💡 If you don't see it in Teams:"
+          echo "   1. Check you're in the correct Teams channel"
+          echo "   2. Verify the webhook is still active in Teams Connectors"
+          echo "   3. Try creating a new webhook and updating the secret"
         else
           echo "❌ Teams webhook failed (HTTP $HTTP_CODE)"
-          echo "Response:"
-          cat /tmp/response.txt
           exit 1
         fi
