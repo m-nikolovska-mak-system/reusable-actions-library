@@ -27,13 +27,13 @@ runs:
 
         # Create simple payload JSON
         cat > /tmp/payload.json <<EOF
-{
-  "@type": "MessageCard",
-  "@context": "http://schema.org/extensions",
-  "summary": "Notification",
-  "text": "${MSG}"
-}
-EOF
+        {
+          "@type": "MessageCard",
+          "@context": "http://schema.org/extensions",
+          "summary": "Notification",
+          "text": "${MSG}"
+        }
+        EOF
 
         echo "📋 Payload preview:"
         cat /tmp/payload.json
