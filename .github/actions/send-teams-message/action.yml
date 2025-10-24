@@ -76,7 +76,8 @@ EOF
                     "text": "$TITLE",
                     "weight": "Bolder",
                     "size": "Large",
-                    "                  },
+                    "color": "$COLOR"
+                  },
                   {
                     "type": "TextBlock",
                     "text": "$MESSAGE",
@@ -85,12 +86,12 @@ EOF
                   $FILE_BLOCK
                   {
                     "type": "TextBlock",
-                    "text": "🔗 [View Commit](https://github.com/$REPO/commit/$SHA)",
-     "wrap": true
+                    "text://github.com/$REPO/commit/$SHA)",
+                    "wrap": true
                   },
                   {
                     "type": "TextBlock",
-                    "text $TIMESTAMP",
+                    "text": "🕒 $TIMESTAMP",
                     "wrap": true
                   }
                 ]
