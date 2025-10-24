@@ -17,7 +17,7 @@ if [ "$SHOW_FILES" == "true" ] && [ -n "$CHANGED_FILES" ]; then
   while IFS= read -r file; do
     FILES_JSON="${FILES_JSON}{\"type\": \"TextBlock\", \"text\": \"• ${file}\", \"wrap\": true},"
   done <<< "$CHANGED_FILES"
-  FILES_JSON="${FILES_JSON%,}"  # remove trailing comma
+  FILES_JSON="${FILES_JSON%,}"  
 fi
 
 # Build the Adaptive Card payload safely
@@ -64,5 +64,11 @@ read -r -d '' PAYLOAD <<EOF
   ]
 }
 EOF
+
+
+echo "===== PAYLOAD SENT TO TEAMS ====="
+echo "$PAYLOAD"
+echo "================================="
+
 
 curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK_URL"
