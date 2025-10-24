@@ -56,7 +56,7 @@ runs:
             "fontType": "Monospace",
             "wrap": true
           },
-EOF
+    EOF
           )
         fi
 
@@ -99,7 +99,7 @@ EOF
             }
           ]
         }
-EOF
+    EOF
         )
 
         curl -s -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK"
