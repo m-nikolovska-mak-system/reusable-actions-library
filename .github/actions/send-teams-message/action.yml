@@ -20,6 +20,9 @@ inputs:
   changed_files:
     description: 'List of changed files (optional)'
     required: false
+  link_url:
+    description: 'URL for more details (e.g. commit or release link)'
+    required: false
 
 runs:
   using: 'composite'
@@ -27,53 +30,52 @@ runs:
     - name: Send Adaptive Card to Teams
       shell: bash
       run: |
-        set -e
+        TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
-        WEBHOOK="${{ inputs.webhook_url }}"
-        TITLE="${{ inputs.title }}"
-        MESSAGE="${{ inputs.message }}"
-
-        if [ -z "$WEBHOOK" ]; then
-          echo "❌ Missing webhook_url input"
-          exit 1
+        # Prepare list of changed files
+        FILES_JSON=""
+        if [ -n "${{ inputs.changed_files }}" ]; then
+          IFS=$'\n'
+          for file in ${{ inputs.changed_files }}; do
+            FILES_JSON="${FILES_JSON}{\"type\": \"TextBlock\", \"text\": \"• $file\", \"spacing\": \"None\"},"
+          done
+          unset IFS
         fi
 
-        echo "📤 Sending Adaptive Card to Microsoft Teams..."
-
-        # Create Adaptive Card JSON payload
-        cat > payload.json <<EOF
+        # Build JSON payload for Adaptive Card
+        PAYLOAD=$(cat <<EOF
         {
-          "attachments": [
+          "@type": "MessageCard",
+          "@context": "https://schema.org/extensions",
+          "themeColor": "${{ inputs.color }}",
+          "summary": "${{ inputs.title }}",
+          "sections": [{
+            "activityTitle": "**${{ inputs.title }}**",
+            "activitySubtitle": "${{ inputs.message }}",
+            "facts": [
+              { "name": "Timestamp", "value": "$TIMESTAMP" }
+            ],
+            "markdown": true
+          },
+          {
+            "text": "**Changed files:**",
+            "potentialAction": []
+          }],
+          "potentialAction": [
             {
-              "contentType": "application/vnd.microsoft.card.adaptive",
-              "content": {
-                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                "type": "AdaptiveCard",
-                "version": "1.4",
-                "body": [
-                  { "type": "TextBlock", "text": "🚀 ${TITLE}", "weight": "Bolder", "size": "Medium" },
-                  { "type": "TextBlock", "text": "${MESSAGE}", "wrap": true }
-                ]
-              }
+              "@type": "OpenUri",
+              "name": "View Details",
+              "targets": [{ "os": "default", "uri": "${{ inputs.link_url }}" }]
             }
           ]
         }
         EOF
+        )
 
-        # Print payload for debugging
-        echo "📋 Payload:"
-        cat payload.json
-        echo ""
-
-        # Send request
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-          -H "Content-Type: application/json" \
-          -d @payload.json \
-          "$WEBHOOK")
-
-        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "202" ]; then
-          echo "✅ Adaptive Card sent successfully!"
-        else
-          echo "❌ Failed with HTTP $HTTP_CODE"
-          exit 1
+        # Inject changed files into card
+        if [ -n "$FILES_JSON" ]; then
+          PAYLOAD=$(echo "$PAYLOAD" | jq --argjson files "[${FILES_JSON%,}]" '.sections[1].potentialAction += $files')
         fi
+
+        # Send to Teams
+        curl -H "Content-Type: application/json" -d "$PAYLOAD" "${{ inputs.webhook_url }}"
