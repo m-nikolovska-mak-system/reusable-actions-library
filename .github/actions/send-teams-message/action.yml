@@ -1,22 +1,235 @@
-name: "Send Microsoft Teams Message"
-description: "Sends a simple text message to a Teams channel"
+name: 'Send Teams Message'
+description: 'Sends a formatted Microsoft Teams notification using Adaptive Cards'
 
 inputs:
   webhook_url:
-    description: "Microsoft Teams webhook URL"
+    description: 'Microsoft Teams webhook URL'
+    required: true
+  title:
+    description: 'Title of the notification card'
     required: true
   message:
-    description: "Message text to send"
+    description: 'Main message to display'
     required: true
+  color:
+    description: 'Color accent for the card (Accent, Good, Warning, Attention)'
+    required: false
+    default: 'Accent'
+  show_files:
+    description: 'Whether to show changed files list'
+    required: false
+    default: 'false'
+  changed_files:
+    description: 'List of changed files (newline-separated)'
+    required: false
+    default: ''
+  actor:
+    description: 'GitHub username (defaults to github.actor)'
+    required: false
+    default: ''
+  repository:
+    description: 'Repository name (defaults to github.repository)'
+    required: false
+    default: ''
+  commit_sha:
+    description: 'Commit SHA (defaults to github.sha)'
+    required: false
+    default: ''
+  branch:
+    description: 'Branch name (defaults to github.ref_name)'
+    required: false
+    default: ''
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
-    - name: Send Teams message
+    - name: Send Teams notification
       shell: bash
+      env:
+        TEAMS_WEBHOOK_URL: ${{ inputs.webhook_url }}
+        NOTIFICATION_TITLE: ${{ inputs.title }}
+        NOTIFICATION_MESSAGE: ${{ inputs.message }}
+        CARD_COLOR: ${{ inputs.color }}
+        SHOW_FILES: ${{ inputs.show_files }}
+        CHANGED_FILES: ${{ inputs.changed_files }}
       run: |
-        echo "📢 Sending message to Teams..."
-        curl -s -H 'Content-Type: application/json' \
-          -d "{\"text\": \"${{ inputs.message }}\"}" \
-          "${{ inputs.webhook_url }}"
-        echo "✅ Teams message sent."
+        set -e
+        
+        # Validate webhook URL
+        if [ -z "$TEAMS_WEBHOOK_URL" ]; then
+          echo "❌ Missing webhook_url input"
+          exit 1
+        fi
+        
+        # Set defaults for GitHub context
+        ACTOR="${{ inputs.actor }}"
+        REPO="${{ inputs.repository }}"
+        SHA="${{ inputs.commit_sha }}"
+        BRANCH="${{ inputs.branch }}"
+        
+        [ -z "$ACTOR" ] && ACTOR="${{ github.actor }}"
+        [ -z "$REPO" ] && REPO="${{ github.repository }}"
+        [ -z "$SHA" ] && SHA="${{ github.sha }}"
+        [ -z "$BRANCH" ] && BRANCH="${{ github.ref_name }}"
+        
+        SHORT_SHA="${SHA:0:7}"
+        TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
+        
+        # Escape JSON characters - CRITICAL for security
+        escape_json() {
+          echo "$1" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g' | sed 's/\r//g'
+        }
+        
+        SAFE_TITLE=$(escape_json "$NOTIFICATION_TITLE")
+        SAFE_MESSAGE=$(escape_json "$NOTIFICATION_MESSAGE")
+        SAFE_FILES=$(escape_json "$CHANGED_FILES")
+        
+        # Build files section conditionally
+        FILES_SECTION=""
+        if [ "$SHOW_FILES" = "true" ] && [ -n "$CHANGED_FILES" ]; then
+          FILES_SECTION=$(cat <<EOF
+                    {
+                      "type": "TextBlock",
+                      "text": "📂 **Files Changed:**",
+                      "weight": "Bolder",
+                      "spacing": "Medium"
+                    },
+                    {
+                      "type": "TextBlock",
+                      "text": "${SAFE_FILES}",
+                      "fontType": "Monospace",
+                      "wrap": true
+                    },
+EOF
+        )
+        fi
+        
+        # Create Adaptive Card payload
+        PAYLOAD=$(cat <<EOF
+        {
+          "type": "message",
+          "attachments": [
+            {
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
+                  {
+                    "type": "ColumnSet",
+                    "columns": [
+                      {
+                        "type": "Column",
+                        "width": "auto",
+                        "items": [
+                          {
+                            "type": "Image",
+                            "url": "https://github.com/${ACTOR}.png",
+                            "size": "Small",
+                            "style": "Person"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "Column",
+                        "width": "stretch",
+                        "items": [
+                          {
+                            "type": "TextBlock",
+                            "text": "${SAFE_TITLE}",
+                            "weight": "Bolder",
+                            "size": "Large",
+                            "color": "${CARD_COLOR}"
+                          },
+                          {
+                            "type": "TextBlock",
+                            "text": "${ACTOR} · ${REPO} (${BRANCH})",
+                            "isSubtle": true,
+                            "wrap": true
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "Container",
+                    "style": "emphasis",
+                    "items": [
+                      {
+                        "type": "TextBlock",
+                        "text": "${SAFE_MESSAGE}",
+                        "wrap": true,
+                        "weight": "Bolder"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "🔗 **Commit:** [${SHORT_SHA}](https://github.com/${REPO}/commit/${SHA})",
+                    "wrap": true,
+                    "spacing": "Medium"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "🕒 **Timestamp:** ${TIMESTAMP}",
+                    "wrap": true
+                  },
+                  ${FILES_SECTION}
+                  {
+                    "type": "TextBlock",
+                    "text": " ",
+                    "spacing": "None"
+                  }
+                ],
+                "actions": [
+                  {
+                    "type": "Action.OpenUrl",
+                    "title": "View Commit",
+                    "url": "https://github.com/${REPO}/commit/${SHA}"
+                  },
+                  {
+                    "type": "Action.OpenUrl",
+                    "title": "View Repository",
+                    "url": "https://github.com/${REPO}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+EOF
+        )
+        
+        # Send to Teams with retry logic
+        echo "📤 Sending notification to Microsoft Teams..."
+        
+        MAX_RETRIES=3
+        RETRY_COUNT=0
+        SUCCESS=false
+        
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = "false" ]; do
+          HTTP_CODE=$(curl -s -o /tmp/teams_response.txt -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" "$TEAMS_WEBHOOK_URL")
+          
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "202" ]; then
+            echo "✅ Teams notification sent successfully!"
+            SUCCESS=true
+          else
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "⚠️ Teams webhook failed (HTTP $HTTP_CODE), retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+              sleep 2
+            else
+              echo "❌ Teams webhook failed after $MAX_RETRIES attempts (HTTP $HTTP_CODE)"
+              echo ""
+              echo "📋 Response from Teams:"
+              cat /tmp/teams_response.txt
+              echo ""
+              echo "🔍 Payload sent:"
+              echo "$PAYLOAD"
+              exit 1
+            fi
+          fi
+        done
