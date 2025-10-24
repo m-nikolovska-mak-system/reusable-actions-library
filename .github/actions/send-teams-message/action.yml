@@ -26,136 +26,81 @@ runs:
     - name: Send Teams message
       shell: bash
       run: |
-        set -euo pipefail
-        echo "📢 Sending Teams message..."
+  set -euo pipefail
+  echo "📢 Sending Teams message..."
 
-        WEBHOOK="${{ inputs.webhook_url }}"
-        TITLE="${{ inputs.title }}"
-        MESSAGE="${{ inputs.message }}"
-        COLOR="${{ inputs.color }}"
-        FILES="${{ inputs.files }}"
-        REPO="${{ github.repository }}"
-        ACTOR="${{ github.actor }}"
-        SHA="${{ github.sha }}"
-        SHORT_SHA="${SHA:0:7}"
-        BRANCH="${{ github.ref_name }}"
-        TIMESTAMP=$(TZ='Europe/Belgrade' date +"%Y-%m-%d %H:%M %Z")
+  WEBHOOK="${{ inputs.webhook_url }}"
+  TITLE="${{ inputs.title }}"
+  MESSAGE="${{ inputs.message }}"
+  COLOR="${{ inputs.color }}"
+  FILES="${{ inputs.files }}"
+  REPO="${{ github.repository }}"
+  ACTOR="${{ github.actor }}"
+  SHA="${{ github.sha }}"
+  SHORT_SHA="${SHA:0:7}"
+  BRANCH="${{ github.ref_name }}"
+  TIMESTAMP=$(TZ='Europe/Belgrade' date +"%Y-%m-%d %H:%M %Z")
 
-        FILE_BLOCK=""
-        if [ -n "$FILES" ]; then
-          FILE_BLOCK=$(cat <<EOF
-          {
-            "type": "TextBlock",
-            "text": "📂 **Files Changed:**",
-            "weight": "Bolder",
-            "spacing": "Medium"
-          },
-          {
-            "type": "TextBlock",
-            "text": "$FILES",
-            "fontType": "Monospace",
-            "wrap": true
-          },
-        EOF
-          )
-        fi
+  FILE_BLOCK=""
+  if [ -n "$FILES" ]; then
+    FILE_BLOCK=$(cat <<EOF
+    {
+      "type": "TextBlock",
+      "text": "📂 **Files Changed:**",
+      "weight": "Bolder",
+      "spacing": "Medium"
+    },
+    {
+      "type": "TextBlock",
+      "text": "$FILES",
+      "fontType": "Monospace",
+      "wrap": true
+    },
+EOF
+    )
+  fi
 
-          PAYLOAD=$(cat <<EOF
-          {
-            "type": "message",
-            "attachments": [
-              {
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                  "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                  "type": "AdaptiveCard",
-                  "version": "1.4",
-                  "body": [
-                    {
-                      "type": "ColumnSet",
-                      "columns": [
-                        {
-                          "type": "Column",
-                          "width": "auto",
-                          "items": [
-                            {
-                              "type": "Image",
-                              "url": "https://github.com/${ACTOR}.png",
-                              "size": "Small",
-                              "style": "Person"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "Column",
-                          "width": "stretch",
-                          "items": [
-                            {
-                              "type": "TextBlock",
-                              "text": "${SAFE_TITLE}",
-                              "weight": "Bolder",
-                              "size": "Large",
-                              "color": "${CARD_COLOR}"
-                            },
-                            {
-                              "type": "TextBlock",
-                              "text": "${DISPLAY_ACTOR} pushed to ${REPO} (${BRANCH})",
-                              "isSubtle": true,
-                              "wrap": true
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "Container",
-                      "style": "attention",
-                      "items": [
-                        {
-                          "type": "TextBlock",
-                          "text": "${SAFE_ACTION}",
-                          "wrap": true,
-                          "weight": "Bolder"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "🔗 **Commit:** [${SHORT_SHA}](https://github.com/${REPO}/commit/${SHA})",
-                      "wrap": true,
-                      "spacing": "Medium"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "🕒 **Timestamp:** ${TIMESTAMP}",
-                      "wrap": true
-                    },
-                    ${FILES_SECTION}
-                    {
-                      "type": "TextBlock",
-                      "text": " ",
-                      "spacing": "None"
-                    }
-                  ],
-                  "actions": [
-                    {
-                      "type": "Action.OpenUrl",
-                      "title": "View Commit",
-                      "url": "https://github.com/${REPO}/commit/${SHA}"
-                    },
-                    {
-                      "type": "Action.OpenUrl",
-                      "title": "View Repository",
-                      "url": "https://github.com/${REPO}"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-          EOF
-          )
+  PAYLOAD=$(cat <<EOF
+  {
+    "type": "message",
+    "attachments": [
+      {
+        "contentType": "application/vnd.microsoft.card.adaptive",
+        "content": {
+          "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+          "type": "AdaptiveCard",
+          "version": "1.4",
+          "body": [
+            {
+              "type": "TextBlock",
+              "text": "$TITLE",
+              "weight": "Bolder",
+              "size": "Large",
+              "color": "$COLOR"
+            },
+            {
+              "type": "TextBlock",
+              "text": "$MESSAGE",
+              "wrap": true
+            },
+            $FILE_BLOCK
+            {
+              "type": "TextBlock",
+              "text": "🔗 [ttps://github.com/$PO/commit/$SHA",
+              "wrap": true
+            },
+            {
+              "type": "TextBlock",
+              "text": "🕒 $TIMESTAMP",
+              "wrap": true
+            }
+          ]
+        }
+      }
+    ]
+  }
+EOF
+  )
 
-
-        curl -s -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK"
-        echo "✅ Teams message sent"
+  curl -s -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK"
+  echo "✅ Teams message sent"
