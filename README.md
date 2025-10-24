@@ -1,29 +1,36 @@
-# Reusable GitHub Workflows Library
+# 🔁 Reusable Actions Library
 
-This repository contains reusable GitHub Actions workflows that can be called from other repositories using the `workflow_call` trigger.
+A centralized library of reusable **GitHub Actions** and **composite steps** used across Mak System projects.
 
-## 🧩 Workflows
+---
 
-### 🟦 Teams Notification Template
+## 📦 Available Reusable Workflows
 
-**File:** `.github/workflows/teams-notification.yml`  
-**Description:** Sends a Microsoft Teams notification when changes are detected in a repository.
+| Workflow | Description |
+|-----------|--------------|
+| **[release-file-watcher.yml](.github/workflows/release-file-watcher.yml)** | Detects file changes on release and sends a Teams notification |
+| **[send-teams-notification.yml](.github/workflows/send-teams-notification.yml)** | Generic Teams Adaptive Card workflow for CI/CD alerts |
 
-#### Usage
+---
 
-In your target repository, create a workflow that calls this one:
+## 🧱 Composite Actions
+
+| Action | Description |
+|---------|--------------|
+| **[check-file-changes](.github/actions/check-file-changes/action.yml)** | Detects changes between commits/tags |
+| **[send-teams-message](.github/actions/send-teams-message/action.yml)** | Sends a formatted Adaptive Card message to Microsoft Teams |
+
+---
+
+## 🚀 Example Usage
 
 ```yaml
-name: Notify Teams on Changes
-on:
-  push:
-    branches: [ main ]
-
 jobs:
   notify:
-    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/teams-notification.yml@main
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/release-file-watcher.yml@main
     with:
-      notification_title: '🚀 New Changes Detected'
-      action_required_message: 'Please review new changes.'
+      watched_file: 'src/java/com/miha/app/App.java'
+      notification_title: '🚀 App.java Changed!'
+      notification_message: '⚠️ Prepare new installer for Template Designer'
     secrets:
-      teams_webhook_url: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      teams_webhook_url: ${{ secrets.TEAMS_WEBHOOK_INSTALLER_URL }}
