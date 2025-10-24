@@ -11,15 +11,16 @@ LINK_URL="$7"
 
 TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
-FILES_SECTION=""
+# Build file list JSON safely
+FILES_JSON=""
 if [ "$SHOW_FILES" == "true" ] && [ -n "$CHANGED_FILES" ]; then
-  FILES_JSON=""
   while IFS= read -r file; do
     FILES_JSON="${FILES_JSON}{\"type\": \"TextBlock\", \"text\": \"• ${file}\", \"wrap\": true},"
   done <<< "$CHANGED_FILES"
-  FILES_SECTION="${FILES_JSON%,}" # Remove trailing comma
+  FILES_JSON="${FILES_JSON%,}"  # remove trailing comma
 fi
 
+# Build the Adaptive Card payload safely
 read -r -d '' PAYLOAD <<EOF
 {
   "type": "message",
@@ -36,7 +37,7 @@ read -r -d '' PAYLOAD <<EOF
             "text": "${TITLE:-GitHub Notification}",
             "weight": "Bolder",
             "size": "Large",
-            "color": "${COLOR:-accent}",
+            "color": "Accent",
             "wrap": true
           },
           {
@@ -46,11 +47,10 @@ read -r -d '' PAYLOAD <<EOF
           },
           {
             "type": "TextBlock",
-            "text": "🕒 **Timestamp:** ${TIMESTAMP}",
-            "wrap": true,
-            "spacing": "Medium"
+            "text": "🕒 Timestamp: ${TIMESTAMP}",
+            "wrap": true
           }
-          $(if [ -n "$FILES_SECTION" ]; then echo ",${FILES_SECTION}"; fi)
+          $( [ -n "$FILES_JSON" ] && echo ", { \"type\": \"Container\", \"items\": [ $FILES_JSON ] }" )
         ],
         "actions": [
           {
