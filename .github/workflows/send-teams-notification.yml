@@ -14,7 +14,7 @@ on:
         required: false
         type: string
         default: 'Accent'
-      watched_path:
+      files:
         required: false
         type: string
         default: ''
@@ -26,22 +26,11 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check for file changes
-        id: diff
-        uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/check-file-changes@main
-        with:
-          target_file: ${{ inputs.watched_path }}
-
       - name: Send Teams message
-        if: steps.diff.outputs.changed == 'true'
         uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/send-teams-message@main
         with:
           webhook_url: ${{ secrets.teams_webhook_url }}
           title: ${{ inputs.notification_title }}
           message: ${{ inputs.notification_message }}
           color: ${{ inputs.card_color }}
-          files: ${{ steps.diff.outputs.changed_files }}
+          files: ${{ inputs.files }}
