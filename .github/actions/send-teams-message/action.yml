@@ -1,147 +1,52 @@
 name: 'Send Teams Message'
-description: 'Sends a simple Microsoft Teams notification'
+description: 'Sends a minimal Microsoft Teams notification'
 
 inputs:
   webhook_url:
     description: 'Microsoft Teams webhook URL'
     required: true
-  title:
-    description: 'Title of the notification'
-    required: true
   message:
-    description: 'Main message to display'
+    description: 'Message to display'
     required: true
-  color:
-    description: 'Color accent (Good, Warning, Attention, or Accent)'
-    required: false
-    default: 'Accent'
-  show_files:
-    description: 'Whether to show changed files list'
-    required: false
-    default: 'false'
-  changed_files:
-    description: 'List of changed files'
-    required: false
-    default: ''
 
 runs:
   using: 'composite'
   steps:
-    - name: Send Teams notification
+    - name: Send minimal Teams notification
       shell: bash
       run: |
         set -e
-        
-        WEBHOOK_URL="${{ inputs.webhook_url }}"
-        TITLE="${{ inputs.title }}"
-        MESSAGE="${{ inputs.message }}"
-        COLOR="${{ inputs.color }}"
-        SHOW_FILES="${{ inputs.show_files }}"
-        FILES="${{ inputs.changed_files }}"
-        
-        # Validate webhook
-        if [ -z "$WEBHOOK_URL" ]; then
+
+        WEBHOOK="${{ inputs.webhook_url }}"
+        MSG="${{ inputs.message }}"
+
+        if [ -z "$WEBHOOK" ]; then
           echo "❌ Missing webhook_url"
           exit 1
         fi
-        
-        echo "📤 Preparing Teams notification..."
-        
-        # Map color names to hex codes
-        case "$COLOR" in
-          Good) THEME_COLOR="28a745" ;;
-          Warning) THEME_COLOR="ffc107" ;;
-          Attention) THEME_COLOR="dc3545" ;;
-          *) THEME_COLOR="0078d4" ;;
-        esac
-        
-        # Build files section if needed
-        FILES_SECTION=""
-        if [ "$SHOW_FILES" = "true" ] && [ -n "$FILES" ]; then
-          # Escape newlines and quotes for JSON
-          SAFE_FILES=$(echo "$FILES" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-          FILES_SECTION="\n\n**📂 Files Changed:**\n\`\`\`\n${SAFE_FILES}\n\`\`\`"
-        fi
-        
-        # Get repo info
-        REPO="${{ github.repository }}"
-        ACTOR="${{ github.actor }}"
-        BRANCH="${{ github.ref_name }}"
-        COMMIT="${{ github.sha }}"
-        SHORT_COMMIT="${COMMIT:0:7}"
-        COMMIT_URL="https://github.com/${REPO}/commit/${COMMIT}"
-        
-        # Build the complete message text
-        FULL_TEXT="**${TITLE}**\n\n${MESSAGE}${FILES_SECTION}\n\n---\n**Repository:** ${REPO}\n**Branch:** ${BRANCH}\n**Commit:** [${SHORT_COMMIT}](${COMMIT_URL})\n**Triggered by:** ${ACTOR}"
-        
-        # Create simple MessageCard JSON
-        cat > /tmp/teams_payload.json <<EOF
+
+        # Create simple payload JSON
+        cat > /tmp/payload.json <<EOF
 {
   "@type": "MessageCard",
   "@context": "http://schema.org/extensions",
-  "themeColor": "${THEME_COLOR}",
-  "summary": "${TITLE}",
-  "sections": [{
-    "activityTitle": "${TITLE}",
-    "activitySubtitle": "${REPO}",
-    "activityImage": "https://github.com/${ACTOR}.png?size=32",
-    "text": "${MESSAGE}${FILES_SECTION}",
-    "facts": [
-      {
-        "name": "Repository:",
-        "value": "${REPO}"
-      },
-      {
-        "name": "Branch:",
-        "value": "${BRANCH}"
-      },
-      {
-        "name": "Commit:",
-        "value": "${SHORT_COMMIT}"
-      },
-      {
-        "name": "Triggered by:",
-        "value": "${ACTOR}"
-      }
-    ],
-    "markdown": true
-  }],
-  "potentialAction": [{
-    "@type": "OpenUri",
-    "name": "View Commit",
-    "targets": [{
-      "os": "default",
-      "uri": "${COMMIT_URL}"
-    }]
-  }]
+  "summary": "Notification",
+  "text": "${MSG}"
 }
 EOF
-        
+
         echo "📋 Payload preview:"
-        cat /tmp/teams_payload.json
-        echo ""
-        
-        # Send to Teams
-        echo "📤 Sending to Microsoft Teams..."
-        
-        HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
-          -H "Content-Type: application/json; charset=UTF-8" \
-          -d @/tmp/teams_payload.json \
-          "$WEBHOOK_URL")
-        
-        HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
-        RESPONSE_BODY=$(echo "$HTTP_RESPONSE" | head -n-1)
-        
-        echo "📊 HTTP Status: $HTTP_CODE"
-        echo "📄 Response: $RESPONSE_BODY"
-        
+        cat /tmp/payload.json
+
+        # Send payload to Teams
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          -H "Content-Type: application/json" \
+          -d @/tmp/payload.json \
+          "$WEBHOOK")
+
         if [ "$HTTP_CODE" = "200" ]; then
-          echo "✅ Teams notification sent successfully!"
+          echo "✅ Teams notification sent!"
         else
           echo "❌ Failed with HTTP $HTTP_CODE"
-          echo "Response body: $RESPONSE_BODY"
           exit 1
         fi
-        
-        # Clean up
-        rm -f /tmp/teams_payload.json
