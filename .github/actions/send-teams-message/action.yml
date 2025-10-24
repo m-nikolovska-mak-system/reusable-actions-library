@@ -56,7 +56,7 @@ runs:
             "fontType": "Monospace",
             "wrap": true
           },
-    EOF
+        EOF
           )
         fi
 
@@ -82,24 +82,23 @@ runs:
                     "type": "TextBlock",
                     "text": "$MESSAGE",
                     "wrap": true
-                  }
-                  ${FILE_BLOCK:+, $FILE_BLOCK}
-                  ,
+                  },
+                  $FILE_BLOCK
                   {
-                    "type": "TextBlock",
-                    "text": "🔗 [View Commit](https://github.com/$REPO/commit/$SHA)",
-     "wrap": true
+                    "type": "                    "text": "🔗 [View Commit](https://PO/commit/$SHA",
+                    "wrap": true
                   },
                   {
                     "type": "TextBlock",
                     "text": "🕒 $TIMESTAMP",
                     "wrap": true
+                  }
                 ]
               }
             }
           ]
         }
-    EOF
+      EOF
         )
 
         curl -s -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK"
