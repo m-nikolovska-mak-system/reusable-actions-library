@@ -1,1 +1,93 @@
-test
+name: 'Check File Changes'
+description: 'Detects if specific files changed between git references (tags, commits, branches)'
+
+inputs:
+  target_file:
+    description: 'File or directory path to monitor (e.g., src/App.java or src/)'
+    required: true
+  from_ref:
+    description: 'Starting git reference (tag, commit, branch). If empty, uses previous tag.'
+    required: false
+    default: ''
+  to_ref:
+    description: 'Ending git reference. Defaults to current commit.'
+    required: false
+    default: ''
+
+outputs:
+  changed:
+    description: 'Whether the target file/path changed (true/false)'
+    value: ${{ steps.check.outputs.changed }}
+  changed_files:
+    description: 'List of all changed files (newline-separated)'
+    value: ${{ steps.check.outputs.changed_files }}
+  from_ref:
+    description: 'The actual from reference used'
+    value: ${{ steps.check.outputs.from_ref }}
+  to_ref:
+    description: 'The actual to reference used'
+    value: ${{ steps.check.outputs.to_ref }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Detect file changes
+      id: check
+      shell: bash
+      run: |
+        set -e
+        echo "🔍 Checking if '${{ inputs.target_file }}' changed..."
+        
+        TARGET_FILE="${{ inputs.target_file }}"
+        FROM_REF="${{ inputs.from_ref }}"
+        TO_REF="${{ inputs.to_ref }}"
+        
+        # Determine TO reference
+        if [ -z "$TO_REF" ]; then
+          TO_REF="${{ github.sha }}"
+        fi
+        
+        # Determine FROM reference
+        if [ -z "$FROM_REF" ]; then
+          # Try to get previous tag
+          CURRENT_TAG="${{ github.event.release.tag_name }}"
+          if [ -n "$CURRENT_TAG" ]; then
+            echo "📌 Current tag: $CURRENT_TAG"
+            FROM_REF=$(git tag --sort=-creatordate | grep -A1 "^${CURRENT_TAG}$" | tail -n1 || echo "")
+            
+            if [ -z "$FROM_REF" ] || [ "$FROM_REF" = "$CURRENT_TAG" ]; then
+              echo "⚠️ No previous tag found - comparing against initial commit"
+              FROM_REF=$(git rev-list --max-parents=0 HEAD)
+            fi
+          else
+            # Fallback: compare with HEAD~1
+            FROM_REF="HEAD~1"
+          fi
+        fi
+        
+        echo "📊 Comparing: $FROM_REF → $TO_REF"
+        echo "from_ref=$FROM_REF" >> $GITHUB_OUTPUT
+        echo "to_ref=$TO_REF" >> $GITHUB_OUTPUT
+        
+        # Get changed files
+        CHANGED_FILES=$(git diff --name-only "$FROM_REF" "$TO_REF" || echo "")
+        
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "ℹ️ No files changed"
+          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "changed_files=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Check if target file/path is in changed files
+        if echo "$CHANGED_FILES" | grep -q "^${TARGET_FILE}"; then
+          echo "✅ Target file '$TARGET_FILE' WAS changed!"
+          echo "changed=true" >> $GITHUB_OUTPUT
+        else
+          echo "ℹ️ Target file '$TARGET_FILE' was NOT changed"
+          echo "changed=false" >> $GITHUB_OUTPUT
+        fi
