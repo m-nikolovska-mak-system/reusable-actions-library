@@ -12,7 +12,7 @@ inputs:
     description: 'Main message to display'
     required: true
   color:
-    description: 'Color accent for the card (Accent, Good, Warning, Attention)'
+    description: 'Color accent (Good, Warning, Attention, or Accent)'
     required: false
     default: 'Accent'
   show_files:
@@ -45,95 +45,103 @@ runs:
           exit 1
         fi
         
-        # Show webhook (masked for security - only first/last 10 chars)
-        WEBHOOK_PREFIX="${WEBHOOK_URL:0:50}"
-        WEBHOOK_SUFFIX="${WEBHOOK_URL: -10}"
-        echo "🔗 Using webhook: ${WEBHOOK_PREFIX}...${WEBHOOK_SUFFIX}"
+        echo "📤 Preparing Teams notification..."
         
-        # Map color to Teams theme color
+        # Map color names to hex codes
         case "$COLOR" in
-          Good) THEME_COLOR="00FF00" ;;
-          Warning) THEME_COLOR="FFA500" ;;
-          Attention) THEME_COLOR="FF0000" ;;
-          *) THEME_COLOR="0078D4" ;;
+          Good) THEME_COLOR="28a745" ;;
+          Warning) THEME_COLOR="ffc107" ;;
+          Attention) THEME_COLOR="dc3545" ;;
+          *) THEME_COLOR="0078d4" ;;
         esac
         
-        # Build files section
-        FILES_TEXT=""
+        # Build files section if needed
+        FILES_SECTION=""
         if [ "$SHOW_FILES" = "true" ] && [ -n "$FILES" ]; then
-          FILES_TEXT=" | Files Changed: ${FILES}"
+          # Escape newlines and quotes for JSON
+          SAFE_FILES=$(echo "$FILES" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          FILES_SECTION="\n\n**📂 Files Changed:**\n\`\`\`\n${SAFE_FILES}\n\`\`\`"
         fi
         
-        # Simple JSON payload (MessageCard format)
-        cat > /tmp/payload.json <<EOF
-        {
-          "@type": "MessageCard",
-          "@context": "https://schema.org/extensions",
-          "themeColor": "${THEME_COLOR}",
-          "title": "${TITLE}",
-          "text": "${MESSAGE}${FILES_TEXT}",
-          "sections": [
-            {
-              "facts": [
-                {
-                  "name": "Repository",
-                  "value": "${{ github.repository }}"
-                },
-                {
-                  "name": "Branch",
-                  "value": "${{ github.ref_name }}"
-                },
-                {
-                  "name": "Commit",
-                  "value": "${{ github.sha }}"
-                },
-                {
-                  "name": "Triggered by",
-                  "value": "${{ github.actor }}"
-                }
-              ]
-            }
-          ],
-          "potentialAction": [
-            {
-              "@type": "OpenUri",
-              "name": "View Commit",
-              "targets": [
-                {
-                  "os": "default",
-                  "uri": "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
-                }
-              ]
-            }
-          ]
-        }
-        EOF
+        # Get repo info
+        REPO="${{ github.repository }}"
+        ACTOR="${{ github.actor }}"
+        BRANCH="${{ github.ref_name }}"
+        COMMIT="${{ github.sha }}"
+        SHORT_COMMIT="${COMMIT:0:7}"
+        COMMIT_URL="https://github.com/${REPO}/commit/${COMMIT}"
         
-        echo "📋 Payload being sent:"
-        cat /tmp/payload.json
+        # Build the complete message text
+        FULL_TEXT="**${TITLE}**\n\n${MESSAGE}${FILES_SECTION}\n\n---\n**Repository:** ${REPO}\n**Branch:** ${BRANCH}\n**Commit:** [${SHORT_COMMIT}](${COMMIT_URL})\n**Triggered by:** ${ACTOR}"
+        
+        # Create simple MessageCard JSON
+        cat > /tmp/teams_payload.json <<EOF
+{
+  "@type": "MessageCard",
+  "@context": "http://schema.org/extensions",
+  "themeColor": "${THEME_COLOR}",
+  "summary": "${TITLE}",
+  "sections": [{
+    "activityTitle": "${TITLE}",
+    "activitySubtitle": "${REPO}",
+    "activityImage": "https://github.com/${ACTOR}.png?size=32",
+    "text": "${MESSAGE}${FILES_SECTION}",
+    "facts": [
+      {
+        "name": "Repository:",
+        "value": "${REPO}"
+      },
+      {
+        "name": "Branch:",
+        "value": "${BRANCH}"
+      },
+      {
+        "name": "Commit:",
+        "value": "${SHORT_COMMIT}"
+      },
+      {
+        "name": "Triggered by:",
+        "value": "${ACTOR}"
+      }
+    ],
+    "markdown": true
+  }],
+  "potentialAction": [{
+    "@type": "OpenUri",
+    "name": "View Commit",
+    "targets": [{
+      "os": "default",
+      "uri": "${COMMIT_URL}"
+    }]
+  }]
+}
+EOF
+        
+        echo "📋 Payload preview:"
+        cat /tmp/teams_payload.json
         echo ""
         
         # Send to Teams
-        echo "📤 Sending notification to Microsoft Teams..."
+        echo "📤 Sending to Microsoft Teams..."
         
-        HTTP_CODE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
-          -X POST \
-          -H "Content-Type: application/json" \
-          -d @/tmp/payload.json \
+        HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -H "Content-Type: application/json; charset=UTF-8" \
+          -d @/tmp/teams_payload.json \
           "$WEBHOOK_URL")
         
-        echo "📊 HTTP Response Code: $HTTP_CODE"
-        echo "📄 Response Body:"
-        cat /tmp/response.txt
-        echo ""
+        HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
+        RESPONSE_BODY=$(echo "$HTTP_RESPONSE" | head -n-1)
         
-        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "202" ]; then
+        echo "📊 HTTP Status: $HTTP_CODE"
+        echo "📄 Response: $RESPONSE_BODY"
+        
+        if [ "$HTTP_CODE" = "200" ]; then
           echo "✅ Teams notification sent successfully!"
-          echo "💡 If you don't see it in Teams:"
-          echo "   1. Check you're in the correct Teams channel"
-          echo "   2. Verify the webhook is still active in Teams Connectors"
-          echo "   3. Try creating a new webhook and updating the secret"
         else
-          echo "❌ Teams webhook failed (HTTP $HTTP_CODE)"
+          echo "❌ Failed with HTTP $HTTP_CODE"
+          echo "Response body: $RESPONSE_BODY"
           exit 1
         fi
+        
+        # Clean up
+        rm -f /tmp/teams_payload.json
