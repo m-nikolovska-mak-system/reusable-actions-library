@@ -42,33 +42,40 @@ jobs:
       files_changed: ${{ steps.check.outputs.files_changed }}
       changed_files_list: ${{ steps.check.outputs.changed_files_list }}
     steps:
+      # Checkout the calling repository (Repo 1)
       - name: Checkout calling repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: source-repo
 
       - name: Get previous release tag
         id: prev_tag
+        working-directory: source-repo
         run: |
           current_tag="${{ github.event.release.tag_name }}"
           prev_tag=$(git tag --sort=-creatordate | grep -v "^${current_tag}$" | head -n1)
           echo "prev_tag=$prev_tag" >> $GITHUB_OUTPUT
           echo "Previous tag: $prev_tag"
+          echo "Current tag: $current_tag"
 
+      # Checkout the actions library
       - name: Checkout actions library
         uses: actions/checkout@v4
         with:
           repository: m-nikolovska-mak-system/reusable-actions-library
           ref: main
-          path: .github/actions-lib
+          path: actions-lib
 
+      # Use the composite action, passing the source-repo path
       - name: Check file changes
         id: check
-        uses: ./.github/actions-lib/actions/check-file-changes
+        uses: ./actions-lib/actions/check-file-changes
         with:
           watched_files: ${{ inputs.watched_files }}
           base_ref: ${{ steps.prev_tag.outputs.prev_tag }}
           head_ref: ${{ github.event.release.tag_name }}
+          repository_path: source-repo
 
   notify:
     needs: check-changes
