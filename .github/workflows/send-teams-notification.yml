@@ -111,7 +111,7 @@ jobs:
                     "text": "🌍 Environment: ${environment}",
                     "wrap": true
                   },
-                                     "text": "👤 Released By: ${released_by}",
+                    "text": "👤 Released By: ${released_by}",
                     "wrap": true
                   },
                   {
