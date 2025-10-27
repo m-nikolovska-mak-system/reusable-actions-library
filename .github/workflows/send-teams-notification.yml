@@ -119,7 +119,7 @@ jobs:
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | head -n -1)
 
-          if [ "$http_code" != 2*" ]; then
+          if [ "$http_code" != 2* ]; then
             echo "❌ Failed to send Teams notification"
             echo "HTTP Status: $http_code"
             echo "Response: $body"
