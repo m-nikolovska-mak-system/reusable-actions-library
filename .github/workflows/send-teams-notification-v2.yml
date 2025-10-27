@@ -1,0 +1,137 @@
+name: Send Teams Notification
+
+on:
+  workflow_call:
+    inputs:
+      title:
+        description: 'Notification title'
+        required: true
+        type: string
+      message:
+        description: 'Notification message'
+        required: true
+        type: string
+      color:
+        description: 'Card color (Attention, Good, Warning, Default)'
+        required: false
+        type: string
+        default: 'Default'
+      changed_files:
+        description: 'Comma-separated list of changed files'
+        required: false
+        type: string
+        default: ''
+      link_url:
+        description: 'URL to link to'
+        required: false
+        type: string
+        default: ''
+      link_text:
+        description: 'Link button text'
+        required: false
+        type: string
+        default: 'View Changes'
+    secrets:
+      teams_webhook_url:
+        description: 'Microsoft Teams webhook URL'
+        required: true
+
+jobs:
+  send-notification:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Validate inputs
+        run: |
+          if [ -z "${{ secrets.teams_webhook_url }}" ]; then
+            echo "❌ ERROR: teams_webhook_url secret is not set"
+            exit 1
+          fi
+          
+          if [ -z "${{ inputs.title }}" ] || [ -z "${{ inputs.message }}" ]; then
+            echo "❌ ERROR: title and message are required"
+            exit 1
+          fi
+          
+          echo "✓ Inputs validated"
+
+      - name: Prepare Teams message
+        id: prepare
+        run: |
+          set -e
+          
+          # Build facts array for changed files
+          facts=""
+          if [ -n "${{ inputs.changed_files }}" ]; then
+            IFS=',' read -ra files <<< "${{ inputs.changed_files }}"
+            for file in "${files[@]}"; do
+              # Escape special characters for JSON
+              file=$(echo "$file" | sed 's/\\/\\\\/g; s/"/\\"/g')
+              facts+=",{\"title\":\"Changed\",\"value\":\"${file}\"}"
+            done
+            facts="${facts:1}"  # Remove leading comma
+          fi
+          
+          # Build action buttons
+          actions=""
+          if [ -n "${{ inputs.link_url }}" ]; then
+            link_text=$(echo "${{ inputs.link_text }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            link_url=$(echo "${{ inputs.link_url }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            actions="\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"${link_text}\",\"url\":\"${link_url}\"}],"
+          fi
+          
+          # Escape title and message
+          title=$(echo "${{ inputs.title }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          message=$(echo "${{ inputs.message }}" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/g' | tr -d '\n' | sed 's/\\n$//')
+          
+          # Create JSON payload
+          cat > payload.json <<EOF
+          {
+            "type": "message",
+            "attachments": [{
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "type": "AdaptiveCard",
+                "body": [{
+                  "type": "TextBlock",
+                  "size": "Large",
+                  "weight": "Bolder",
+                  "text": "${title}"
+                },{
+                  "type": "TextBlock",
+                  "text": "${message}",
+                  "wrap": true
+                }${facts:+,{\"type\":\"FactSet\",\"facts\":[$facts]}}],
+                ${actions}
+                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.4"
+              }
+            }]
+          }
+          EOF
+          
+          echo "Generated payload:"
+          cat payload.json
+
+      - name: Send to Microsoft Teams
+        run: |
+          set -e
+          
+          echo "Sending notification to Teams..."
+          
+          response=$(curl -s -w "\n%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d @payload.json \
+            "${{ secrets.teams_webhook_url }}")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n -1)
+          
+          # Teams returns 200 or 202 on success
+          if [ "$http_code" = "200" ] || [ "$http_code" = "202" ]; then
+            echo "✅ Teams notification sent successfully (HTTP $http_code)"
+          else
+            echo "❌ Failed to send Teams notification (HTTP $http_code)"
+            echo "Response body: $body"
+            exit 1
+          fi
