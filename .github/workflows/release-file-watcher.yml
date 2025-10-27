@@ -3,74 +3,84 @@ name: Release File Watcher
 on:
   workflow_call:
     inputs:
-      watched_file:
-        description: 'File or directory path to monitor (e.g., src/App.java)'
+      watched_files:
+        description: 'Files to watch (one per line or comma-separated)'
         required: true
         type: string
       notification_title:
-        description: 'Title of the Teams notification'
-        required: false
+        description: 'Teams notification title'
+        required: true
         type: string
-        default: '🚀 Watched File Changed in Release'
       notification_message:
-        description: 'Message to display in the notification'
-        required: false
+        description: 'Teams notification message'
+        required: true
         type: string
-        default: '⚠️ The watched file has been modified in this release'
       card_color:
-        description: 'Card color (Accent, Good, Warning, Attention)'
+        description: 'Card color (Attention, Good, Warning, Default)'
         required: false
         type: string
-        default: 'Warning'
-      show_changed_files:
-        description: 'Show all changed files in notification'
-        required: false
-        type: boolean
-        default: false
+        default: 'Default'
       link_url:
+        description: 'URL to link to'
         required: false
         type: string
+        default: ''
+      link_text:
+        description: 'Link button text'
+        required: false
+        type: string
+        default: 'View Changes'
     secrets:
       teams_webhook_url:
         description: 'Microsoft Teams webhook URL'
         required: true
 
 jobs:
-  check-and-notify:
+  check-changes:
     runs-on: ubuntu-latest
-    
+    outputs:
+      files_changed: ${{ steps.check.outputs.files_changed }}
+      changed_files_list: ${{ steps.check.outputs.changed_files_list }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: Fetch all tags
-        run: git fetch --tags --force
-      
-      - name: Check if watched file changed
+
+      - name: Get previous release tag
+        id: prev_tag
+        run: |
+          current_tag="${{ github.event.release.tag_name }}"
+          prev_tag=$(git tag --sort=-creatordate | grep -v "^${current_tag}$" | head -n1)
+          echo "prev_tag=$prev_tag" >> $GITHUB_OUTPUT
+          echo "Previous tag: $prev_tag"
+
+      - name: Check file changes
         id: check
-        uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/check-file-changes@main
+        uses: m-nikolovska-mak-system/reusable-actions-library/actions/check-file-changes@main
         with:
-          target_file: ${{ inputs.watched_file }}
-      
+          watched_files: ${{ inputs.watched_files }}
+          base_ref: ${{ steps.prev_tag.outputs.prev_tag }}
+          head_ref: ${{ github.event.release.tag_name }}
+
+  notify:
+    needs: check-changes
+    if: needs.check-changes.outputs.files_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout reusable actions
+        uses: actions/checkout@v4
+        with:
+          repository: m-nikolovska-mak-system/reusable-actions-library
+          ref: main
+
       - name: Send Teams notification
-        if: steps.check.outputs.changed == 'true'
-        uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/send-teams-message@main
+        uses: ./actions/send-teams-notification
         with:
           webhook_url: ${{ secrets.teams_webhook_url }}
           title: ${{ inputs.notification_title }}
           message: ${{ inputs.notification_message }}
           color: ${{ inputs.card_color }}
-          show_files: ${{ inputs.show_changed_files }}
-          changed_files: ${{ steps.check.outputs.changed_files }}
+          changed_files: ${{ needs.check-changes.outputs.changed_files_list }}
           link_url: ${{ inputs.link_url }}
-
-      
-      - name: Log result
-        run: |
-          if [ "${{ steps.check.outputs.changed }}" = "true" ]; then
-            echo "✅ File '${{ inputs.watched_file }}' changed - notification sent!"
-          else
-            echo "ℹ️ File '${{ inputs.watched_file }}' not changed - skipping notification"
-          fi
+          link_text: ${{ inputs.link_text }}
