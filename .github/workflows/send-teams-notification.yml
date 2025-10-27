@@ -114,8 +114,8 @@ jobs:
           # Save webhook URL for next step (don't expose in logs)
           echo "webhook_url=$webhook_url" >> $GITHUB_OUTPUT
 
-      - name: Send to Teams
-        run: |
+          - name: Send to Teams
+          run: |
           response=$(curl -s -w "\n%{http_code}" \
             -H "Content-Type: application/json" \
             -d @payload.json \
@@ -131,4 +131,5 @@ jobs:
             exit 1
           fi
           
-          echo "✅ Teams notification sent successfully"
+          echo "✅ Teams notification sent successfully (HTTP $http_code)"
+
