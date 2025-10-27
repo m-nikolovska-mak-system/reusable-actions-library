@@ -42,7 +42,7 @@ jobs:
       files_changed: ${{ steps.check.outputs.files_changed }}
       changed_files_list: ${{ steps.check.outputs.changed_files_list }}
     steps:
-      - name: Checkout repository
+      - name: Checkout calling repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -55,9 +55,16 @@ jobs:
           echo "prev_tag=$prev_tag" >> $GITHUB_OUTPUT
           echo "Previous tag: $prev_tag"
 
+      - name: Checkout actions library
+        uses: actions/checkout@v4
+        with:
+          repository: m-nikolovska-mak-system/reusable-actions-library
+          ref: main
+          path: .github/actions-lib
+
       - name: Check file changes
         id: check
-        uses: m-nikolovska-mak-system/reusable-actions-library/actions/check-file-changes@main
+        uses: ./.github/actions-lib/actions/check-file-changes
         with:
           watched_files: ${{ inputs.watched_files }}
           base_ref: ${{ steps.prev_tag.outputs.prev_tag }}
@@ -68,14 +75,14 @@ jobs:
     if: needs.check-changes.outputs.files_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout reusable actions
+      - name: Checkout actions library
         uses: actions/checkout@v4
         with:
           repository: m-nikolovska-mak-system/reusable-actions-library
           ref: main
 
       - name: Send Teams notification
-        uses: ./actions/send-teams-notification
+        uses: ./actions/send-teams-message
         with:
           webhook_url: ${{ secrets.teams_webhook_url }}
           title: ${{ inputs.notification_title }}
