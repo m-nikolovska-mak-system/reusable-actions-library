@@ -45,7 +45,7 @@ Compares the current release tag against the previous tag and checks if specifie
 | `changed_files_list`| Comma-separated list of changed files   |
 
 
-<img width="2795" height="1268" alt="image" src="https://github.com/user-attachments/assets/ac62a754-6918-4741-adaa-4c6c7231e363" />
+<img width="1200" height="800" alt="image" src="https://github.com/user-attachments/assets/ac62a754-6918-4741-adaa-4c6c7231e363" />
 
 
 ### **Example Usage**
