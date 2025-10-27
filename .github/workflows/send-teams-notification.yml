@@ -99,6 +99,8 @@ jobs:
         fi
     
         # Create payload
+    
+        # Build Adaptive Card JSON
         cat > payload.json <<EOF
         {
           "type": "message",
@@ -109,13 +111,14 @@ jobs:
               "body": [
                 {
                   "type": "TextBlock",
+                  "text": "🚀 ${title}${release_version:+ (Release ${release_version})}",
                   "size": "Large",
                   "weight": "Bolder",
-                  "text": "${title}${release_version:+ (Release ${release_version})}"
+                  "color": "Attention"
                 },
                 {
                   "type": "TextBlock",
-                  "text": "⚠️ ${message}",
+                  "text": "⚠️ **Action Required:** ${message}",
                   "wrap": true
                 },
                 {
@@ -127,25 +130,35 @@ jobs:
                   "type": "TextBlock",
                   "text": "👤 Released By: ${released_by}",
                   "wrap": true
-                }
-                ${facts:+,{"type":"FactSet","facts":[$facts]}},
+                },
+                {
+                  "type": "TextBlock",
+                  "text": "📂 **Files Changed:**${files_section}",
+                  "wrap": true
+                },
                 {
                   "type": "TextBlock",
                   "text": "📅 Timestamp: $(date '+%Y-%m-%d %H:%M %Z')",
                   "wrap": true
                 }
               ],
-              ${actions}
+              "actions": [
+                {
+                  "type": "Action.OpenUrl",
+                  "title": "${link_text}",
+                  "url": "${link_url}"
+                }
+              ],
               "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
               "version": "1.4"
             }
           }]
         }
         EOF
-    
+        
         echo "webhook_url=$webhook_url" >> $GITHUB_OUTPUT
-
-
+        
+        
 
     - name: Send to Teams
       run: |
