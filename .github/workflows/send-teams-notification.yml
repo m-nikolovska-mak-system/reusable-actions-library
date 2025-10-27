@@ -122,11 +122,12 @@ jobs:
                     "text": "👤 Released By: ${released_by}",
                     "wrap": true
                   },
-                  {
-                    "type": "TextBlock",
-                    "text": "🔗 [${link_text,
-                    "wrap": true
-                  },
+                                   {
+                    "type": "Action.OpenUrl",
+                    "title": "${link_text}",
+                    "url": "${link_url}"
+                  }
+                    ,
                   {
                     "type": "TextBlock",
                     "text": "📂 **Files Changed:**${files_section}",
