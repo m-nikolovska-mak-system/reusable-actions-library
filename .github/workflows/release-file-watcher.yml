@@ -19,7 +19,7 @@ on:
         description: 'Card color (Attention, Good, Warning, Default)'
         required: false
         type: string
-        default: 'Default'
+        default: 'Warning'
       link_url:
         description: 'URL to link to'
         required: false
@@ -29,7 +29,7 @@ on:
         description: 'Link button text'
         required: false
         type: string
-        default: 'View Changes'
+        default: 'View Release'
     secrets:
       teams_webhook_url:
         description: 'Microsoft Teams webhook URL'
@@ -41,60 +41,143 @@ jobs:
     outputs:
       files_changed: ${{ steps.check.outputs.files_changed }}
       changed_files_list: ${{ steps.check.outputs.changed_files_list }}
+      previous_tag: ${{ steps.prev_tag.outputs.prev_tag }}
     steps:
-      # Checkout the calling repository (Repo 1)
-      - name: Checkout calling repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          path: source-repo
 
       - name: Get previous release tag
         id: prev_tag
-        working-directory: source-repo
         run: |
           current_tag="${{ github.event.release.tag_name }}"
           prev_tag=$(git tag --sort=-creatordate | grep -v "^${current_tag}$" | head -n1)
+          
+          if [ -z "$prev_tag" ]; then
+            echo "⚠️ No previous tag found, this might be the first release"
+            # Use initial commit as base
+            prev_tag=$(git rev-list --max-parents=0 HEAD)
+          fi
+          
           echo "prev_tag=$prev_tag" >> $GITHUB_OUTPUT
-          echo "Previous tag: $prev_tag"
+          echo "Previous tag/ref: $prev_tag"
           echo "Current tag: $current_tag"
 
-      # Checkout the actions library
-      - name: Checkout actions library
-        uses: actions/checkout@v4
-        with:
-          repository: m-nikolovska-mak-system/reusable-actions-library
-          ref: main
-          path: actions-lib
-
-      # Use the composite action, passing the source-repo path
-      - name: Check file changes
+      - name: Check for file changes
         id: check
-        uses: ./actions-lib/actions/check-file-changes
-        with:
-          watched_files: ${{ inputs.watched_files }}
-          base_ref: ${{ steps.prev_tag.outputs.prev_tag }}
-          head_ref: ${{ github.event.release.tag_name }}
-          repository_path: source-repo
+        run: |
+          base_ref="${{ steps.prev_tag.outputs.prev_tag }}"
+          head_ref="${{ github.event.release.tag_name }}"
+          
+          echo "Checking changes between $base_ref and $head_ref"
+          
+          # Get list of changed files
+          changed_files=$(git diff --name-only $base_ref $head_ref)
+          echo "Changed files in commit range:"
+          echo "$changed_files"
+          
+          # Convert watched_files input to array
+          watched_files=$(echo "${{ inputs.watched_files }}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          
+          echo "Watched files:"
+          echo "$watched_files"
+          
+          # Check if any watched file changed
+          files_changed="false"
+          changed_files_list=""
+          
+          while IFS= read -r watched_file; do
+            if [ -z "$watched_file" ]; then
+              continue
+            fi
+            
+            if echo "$changed_files" | grep -q "^${watched_file}$"; then
+              files_changed="true"
+              echo "✓ File changed: $watched_file"
+              if [ -z "$changed_files_list" ]; then
+                changed_files_list="$watched_file"
+              else
+                changed_files_list="$changed_files_list,$watched_file"
+              fi
+            else
+              echo "✗ File not changed: $watched_file"
+            fi
+          done <<< "$watched_files"
+          
+          echo "files_changed=$files_changed" >> $GITHUB_OUTPUT
+          echo "changed_files_list=$changed_files_list" >> $GITHUB_OUTPUT
+          echo "==== Results ===="
+          echo "Files changed: $files_changed"
+          echo "Changed files list: $changed_files_list"
 
   notify:
     needs: check-changes
     if: needs.check-changes.outputs.files_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout actions library
-        uses: actions/checkout@v4
-        with:
-          repository: m-nikolovska-mak-system/reusable-actions-library
-          ref: main
-
       - name: Send Teams notification
-        uses: ./actions/send-teams-message
-        with:
-          webhook_url: ${{ secrets.teams_webhook_url }}
-          title: ${{ inputs.notification_title }}
-          message: ${{ inputs.notification_message }}
-          color: ${{ inputs.card_color }}
-          changed_files: ${{ needs.check-changes.outputs.changed_files_list }}
-          link_url: ${{ inputs.link_url }}
-          link_text: ${{ inputs.link_text }}
+        run: |
+          # Prepare changed files facts
+          facts=""
+          if [ -n "${{ needs.check-changes.outputs.changed_files_list }}" ]; then
+            IFS=',' read -ra files <<< "${{ needs.check-changes.outputs.changed_files_list }}"
+            for file in "${files[@]}"; do
+              file=$(echo "$file" | sed 's/"/\\"/g')
+              facts+=",{\"title\":\"Changed\",\"value\":\"${file}\"}"
+            done
+            facts="${facts:1}"
+          fi
+          
+          # Prepare action buttons
+          actions=""
+          if [ -n "${{ inputs.link_url }}" ]; then
+            link_text=$(echo "${{ inputs.link_text }}" | sed 's/"/\\"/g')
+            link_url=$(echo "${{ inputs.link_url }}" | sed 's/"/\\"/g')
+            actions="\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"${link_text}\",\"url\":\"${link_url}\"}],"
+          fi
+          
+          # Escape title and message
+          title=$(echo "${{ inputs.notification_title }}" | sed 's/"/\\"/g')
+          message=$(echo "${{ inputs.notification_message }}" | sed 's/"/\\"/g')
+          
+          # Create payload
+          cat > payload.json <<EOF
+          {
+            "type": "message",
+            "attachments": [{
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "type": "AdaptiveCard",
+                "body": [{
+                  "type": "TextBlock",
+                  "size": "Large",
+                  "weight": "Bolder",
+                  "text": "${title}"
+                },{
+                  "type": "TextBlock",
+                  "text": "${message}",
+                  "wrap": true
+                }${facts:+,{\"type\":\"FactSet\",\"facts\":[$facts]}}],
+                ${actions}
+                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.4"
+              }
+            }]
+          }
+          EOF
+          
+          echo "Sending notification to Teams..."
+          response=$(curl -s -w "\n%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d @payload.json \
+            "${{ secrets.teams_webhook_url }}")
+          
+          http_code=$(echo "$response" | tail -n1)
+          
+          if [ "$http_code" != "200" ]; then
+            echo "❌ Failed to send Teams notification (HTTP $http_code)"
+            exit 1
+          fi
+          
+          echo "✅ Teams notification sent successfully"
