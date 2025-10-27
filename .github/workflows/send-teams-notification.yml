@@ -30,6 +30,11 @@ on:
         description: 'Notification message'
         required: true
         type: string
+      color:
+        description: 'Card color (Attention, Good, Warning, Default)'
+        required: false
+        type: string
+        default: 'Default'
       changed_files:
         description: 'Comma-separated list of changed files'
         required: false
