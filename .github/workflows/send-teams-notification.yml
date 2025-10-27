@@ -8,11 +8,6 @@ on:
         required: false
         type: string
         default: ''
-      environment:
-        description: 'Deployment environment'
-        required: false
-        type: string
-        default: 'Production'
       released_by:
         description: 'Who triggered the release'
         required: false
@@ -77,7 +72,6 @@ jobs:
         title=$(echo "${{ inputs.title }}" | sed 's/"/\\"/g')
         message=$(echo "${{ inputs.message }}" | sed 's/"/\\"/g')
         release_version=$(echo "${{ inputs.release_version }}" | sed 's/"/\\"/g')
-        environment=$(echo "${{ inputs.environment }}" | sed 's/"/\\"/g')
         released_by=$(echo "${{ inputs.released_by }}" | sed 's/"/\\"/g')
         link_url=$(echo "${{ inputs.link_url }}" | sed 's/"/\\"/g')
         link_text=$(echo "${{ inputs.link_text }}" | sed 's/"/\\"/g')
@@ -121,12 +115,7 @@ jobs:
                   "text": "⚠️ **Action Required:** ${message}",
                   "wrap": true
                 },
-                {
-                  "type": "TextBlock",
-                  "text": "🌍 Environment: ${environment}",
-                  "wrap": true
-                },
-                {
+                            {
                   "type": "TextBlock",
                   "text": "👤 Released By: ${released_by}",
                   "wrap": true
