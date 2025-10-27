@@ -3,6 +3,21 @@ name: Send Teams Notification
 on:
   workflow_call:
     inputs:
+      release_version:
+        description: 'Release version'
+        required: false
+        type: string
+        default: ''
+      environment:
+        description: 'Deployment environment'
+        required: false
+        type: string
+        default: 'Production'
+      released_by:
+        description: 'Who triggered the release'
+        required: false
+        type: string
+        default: ''
       webhook_url:
         description: 'Microsoft Teams webhook URL (use secrets for security)'
         required: false
@@ -63,14 +78,29 @@ jobs:
             exit 1
           fi
           facts=""
+          
+          # Add release info
+          if [ -n "${{ inputs.release_version }}" ]; then
+            facts+=",{\"title\":\"Release Version\",\"value\":\"${{ inputs.release_version }}\"}"
+          fi
+          if [ -n "${{ inputs.environment }}" ]; then
+            facts+=",{\"title\":\"Environment\",\"value\":\"${{ inputs.environment }}\"}"
+          fi
+          
+          if [ -n "${{ inputs.released_by }}" ]; then
+            facts+=",{\"title\":\"Released By\",\"value\":\"${{ inputs.released_by }}\"}"
+          fi
+          
+          # Add changed files
           if [ -n "${{ inputs.changed_files }}" ]; then
             IFS=',' read -ra files <<< "${{ inputs.changed_files }}"
             for file in "${files[@]}"; do
               file=$(echo "$file" | sed 's/"/\\"/g')
-              facts+=",{\"title\":\"Changed\",\"value\":\"${file}\"}"
+              facts+=",{\"title\":\"Changed File\",\"value\":\"${file}\"}"
             done
-            facts="${facts:1}"
           fi
+          
+          facts="${facts:1}"  # Remove leading comma
 
           actions=""
           if [ -n "${{ inputs.link_url }}" ]; then
