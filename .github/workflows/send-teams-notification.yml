@@ -30,11 +30,6 @@ on:
         description: 'Notification message'
         required: true
         type: string
-      color:
-        description: 'Card color (Attention, Good, Warning, Default)'
-        required: false
-        type: string
-        default: 'Default'
       changed_files:
         description: 'Comma-separated list of changed files'
         required: false
@@ -49,7 +44,7 @@ on:
         description: 'Link button text'
         required: false
         type: string
-        default: 'View Changes'
+        default: 'View Release'
     secrets:
       teams_webhook_url:
         description: 'Microsoft Teams webhook URL (preferred over input)'
@@ -59,12 +54,6 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Teams message
-        uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/send-teams-message@main
-        with:
-          webhook_url: ${{ secrets.teams_webhook_url }}
-          message: ${{ inputs.message }}
-
       - name: Prepare Teams message
         id: prepare
         run: |
@@ -77,41 +66,26 @@ jobs:
             echo "ERROR: No webhook URL provided"
             exit 1
           fi
-          facts=""
-          
-          # Add release info
-          if [ -n "${{ inputs.release_version }}" ]; then
-            facts+=",{\"title\":\"Release Version\",\"value\":\"${{ inputs.release_version }}\"}"
-          fi
-          if [ -n "${{ inputs.environment }}" ]; then
-            facts+=",{\"title\":\"Environment\",\"value\":\"${{ inputs.environment }}\"}"
-          fi
-          
-          if [ -n "${{ inputs.released_by }}" ]; then
-            facts+=",{\"title\":\"Released By\",\"value\":\"${{ inputs.released_by }}\"}"
-          fi
-          
-          # Add changed files
+
+          # Escape inputs
+          title=$(echo "${{ inputs.title }}" | sed 's/"/\\"/g')
+          message=$(echo "${{ inputs.message }}" | sed 's/"/\\"/g')
+          release_version=$(echo "${{ inputs.release_version }}" | sed 's/"/\\"/g')
+          environment=$(echo "${{ inputs.environment }}" | sed 's/"/\\"/g')
+          released_by=$(echo "${{ inputs.released_by }}" | sed 's/"/\\"/g')
+          link_url=$(echo "${{ inputs.link_url }}" | sed 's/"/\\"/g')
+          link_text=$(echo "${{ inputs.link_text }}" | sed 's/"/\\"/g')
+
+          # Build changed files section
+          files_section=""
           if [ -n "${{ inputs.changed_files }}" ]; then
             IFS=',' read -ra files <<< "${{ inputs.changed_files }}"
             for file in "${files[@]}"; do
-              file=$(echo "$file" | sed 's/"/\\"/g')
-              facts+=",{\"title\":\"Changed File\",\"value\":\"${file}\"}"
+              files_section+="\n- $file"
             done
           fi
-          
-          facts="${facts:1}"  # Remove leading comma
 
-          actions=""
-          if [ -n "${{ inputs.link_url }}" ]; then
-            link_text=$(echo "${{ inputs.link_text }}" | sed 's/"/\\"/g')
-            link_url=$(echo "${{ inputs.link_url }}" | sed 's/"/\\"/g')
-            actions="\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"${link_text}\",\"url\":\"${link_url}\"}],"
-          fi
-
-          title=$(echo "${{ inputs.title }}" | sed 's/"/\\"/g')
-          message=$(echo "${{ inputs.message }}" | sed 's/"/\\"/g')
-
+          # Build Adaptive Card JSON
           cat > payload.json <<EOF
           {
             "type": "message",
@@ -119,26 +93,52 @@ jobs:
               "contentType": "application/vnd.microsoft.card.adaptive",
               "content": {
                 "type": "AdaptiveCard",
-                "body": [{
-                  "type": "TextBlock",
-                  "size": "Large",
-                  "weight": "Bolder",
-                  "text": "${title}"
-                },{
-                  "type": "TextBlock",
-                  "text": "${message}",
-                  "wrap": true
-                }${facts:+,{\"type\":\"FactSet\",\"facts\":[$facts]}}],
-                ${actions}
+                "body": [
+                  {
+                    "type": "TextBlock",
+                    "text": "🚀 ${title} ${release_version:+(Release ${release_version})}",
+                    "size": "Large",
+                    "weight": "Bolder",
+                    "color": "Attention"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "⚠️ **Action Required:** ${message}",
+                    "wrap": true
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "🌍 Environment: ${environment}",
+                    "wrap": true
+                  },
+                                     "text": "👤 Released By: ${released_by}",
+                    "wrap": true
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "🔗 [${link_text}](${link_url})",
+                    "wrap": true
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "📂 **Files Changed:**${files_section}",
+                    "wrap": true
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "📅 Timestamp: $(date '+%Y-%m-%d %H:%M %Z')",
+                    "wrap": true
+                  }
+                ],
                 "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
                 "version": "1.4"
-                       }
+              }
+            }]
+          }
           EOF
 
-          echo "Generated payload:"
-          cat payload.json
-
           echo "webhook_url=$webhook_url" >> $GITHUB_OUTPUT
+
       - name: Send to Teams
         run: |
           response=$(curl -s -w "\n%{http_code}" \
@@ -148,7 +148,7 @@ jobs:
 
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | head -n -1)
-          
+
           if [[ "$http_code" != 2* ]]; then
             echo "❌ Failed to send Teams notification"
             echo "HTTP Status: $http_code"
