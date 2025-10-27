@@ -11,6 +11,10 @@ inputs:
   head_ref:
     description: 'Head git reference to compare against'
     required: true
+  repository_path:
+    description: 'Path to the git repository to check'
+    required: false
+    default: '.'
 
 outputs:
   files_changed:
@@ -26,31 +30,46 @@ runs:
     - name: Check for file changes
       id: check
       shell: bash
+      working-directory: ${{ inputs.repository_path }}
       run: |
         echo "Checking changes between ${{ inputs.base_ref }} and ${{ inputs.head_ref }}"
+        echo "Working directory: $(pwd)"
         
         # Get list of changed files
         changed_files=$(git diff --name-only ${{ inputs.base_ref }} ${{ inputs.head_ref }})
+        echo "Changed files in commit range:"
+        echo "$changed_files"
         
         # Convert watched_files input to array (handle both newline and comma separation)
-        watched_files=$(echo "${{ inputs.watched_files }}" | tr ',' '\n' | tr -d ' ')
+        watched_files=$(echo "${{ inputs.watched_files }}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        
+        echo "Watched files:"
+        echo "$watched_files"
         
         # Check if any watched file changed
         files_changed="false"
         changed_files_list=""
         
         while IFS= read -r watched_file; do
+          if [ -z "$watched_file" ]; then
+            continue
+          fi
+          
           if echo "$changed_files" | grep -q "^${watched_file}$"; then
             files_changed="true"
+            echo "✓ File changed: $watched_file"
             if [ -z "$changed_files_list" ]; then
               changed_files_list="$watched_file"
             else
               changed_files_list="$changed_files_list,$watched_file"
             fi
+          else
+            echo "✗ File not changed: $watched_file"
           fi
         done <<< "$watched_files"
         
         echo "files_changed=$files_changed" >> $GITHUB_OUTPUT
         echo "changed_files_list=$changed_files_list" >> $GITHUB_OUTPUT
+        echo "==== Results ===="
         echo "Files changed: $files_changed"
-        echo "Changed files: $changed_files_list"
+        echo "Changed files list: $changed_files_list"
