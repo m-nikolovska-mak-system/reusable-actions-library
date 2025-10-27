@@ -90,7 +90,8 @@ jobs:
             done
           fi
 
-          # Build Adaptive Card JSON
+         
+            # Build Adaptive Card JSON
           cat > payload.json <<EOF
           {
             "type": "message",
@@ -101,7 +102,7 @@ jobs:
                 "body": [
                   {
                     "type": "TextBlock",
-                    "text": "🚀 ${title} ${release_version:+(Release ${release_version})}",
+                    "text": "🚀 ${title}${release_version:+ (Release ${release_version})}",
                     "size": "Large",
                     "weight": "Bolder",
                     "color": "Attention"
@@ -115,13 +116,15 @@ jobs:
                     "type": "TextBlock",
                     "text": "🌍 Environment: ${environment}",
                     "wrap": true
-                  },{
+                  },
+                  {
+                    "type": "TextBlock",
                     "text": "👤 Released By: ${released_by}",
                     "wrap": true
                   },
                   {
                     "type": "TextBlock",
-                    "text": "🔗 [${link_text}](${link_url})",
+                    "text": "🔗 [${link_text,
                     "wrap": true
                   },
                   {
@@ -143,6 +146,7 @@ jobs:
           EOF
 
           echo "webhook_url=$webhook_url" >> $GITHUB_OUTPUT
+
 
       - name: Send to Teams
         run: |
