@@ -92,7 +92,9 @@ jobs:
         fi
     
         # Timestamp in CET/CEST
-        timestamp=$(TZ="Europe/Skopje" date '+%Y-%m-%d %H:%M %Z')
+        sudo apt-get install -y tzdata
+        export TZ="Europe/Skopje"
+        timestamp=$(date '+%Y-%m-%d %H:%M %Z')
     
           
           
