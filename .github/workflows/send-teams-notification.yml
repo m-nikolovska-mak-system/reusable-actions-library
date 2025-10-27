@@ -36,12 +36,9 @@ on:
         type: string
         default: 'View Changes'
     secrets:
-      webhook_url:
-        required: true
-      teams_webhook_url:
+        teams_webhook_url:
         description: 'Microsoft Teams webhook URL (preferred over input)'
-        required: false
-
+        required: true
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -49,7 +46,7 @@ jobs:
       - name: Send Teams message
         uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/send-teams-message@main
         with:
-          webhook_url: ${{ secrets.webhook_url }}
+          webhook_url="${{ secrets.teams_webhook_url }}"
           message: ${{ inputs.message }}
       - name: Prepare Teams message
         id: prepare
@@ -59,7 +56,7 @@ jobs:
           if [ -z "$webhook_url" ]; then
             webhook_url="${{ inputs.webhook_url }}"
           fi
-          
+                
           if [ -z "$webhook_url" ]; then
             echo "ERROR: No webhook URL provided"
             exit 1
