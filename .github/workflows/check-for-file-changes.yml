@@ -4,27 +4,17 @@ on:
   workflow_call:
     inputs:
       watched_files:
-        description: 'Files to watch (one per line or comma-separated)'
-        required: true
-        type: string
-      base_ref:
-        description: 'Base git reference (e.g., previous tag)'
-        required: true
-        type: string
-      head_ref:
-        description: 'Head git reference (e.g., current tag)'
+        description: 'Files to watch (comma-separated or newline-separated)'
         required: true
         type: string
     outputs:
       files_changed:
-        description: 'true if watched files changed, false otherwise'
-        value: ${{ jobs.check.outputs.files_changed }}
+        value: ${{ jobs.check-changes.outputs.files_changed }}
       changed_files_list:
-        description: 'Comma-separated list of changed files'
-        value: ${{ jobs.check.outputs.changed_files_list }}
+        value: ${{ jobs.check-changes.outputs.changed_files_list }}
 
 jobs:
-  check:
+  check-changes:
     runs-on: ubuntu-latest
     outputs:
       files_changed: ${{ steps.check.outputs.files_changed }}
@@ -35,39 +25,47 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Get previous release tag
+        id: prev_tag
+        run: |
+          git fetch --tags
+          current_tag="${{ github.event.release.tag_name }}"
+          prev_tag=$(git tag --sort=-creatordate | grep -v "^${current_tag}$" | head -n1)
+          
+          if [ -z "$prev_tag" ]; then
+            echo "⚠️ No previous tag found, using first commit."
+            prev_tag=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "prev_tag=$prev_tag" >> $GITHUB_OUTPUT
+          echo "Previous tag/ref: $prev_tag"
+          echo "Current tag: $current_tag"
+
       - name: Check for file changes
         id: check
         run: |
-          echo "Checking changes between ${{ inputs.base_ref }} and ${{ inputs.head_ref }}"
+          base_ref="${{ steps.prev_tag.outputs.prev_tag }}"
+          head_ref="${{ github.event.release.tag_name }}"
           
-          # Get list of changed files
-          changed_files=$(git diff --name-only ${{ inputs.base_ref }} ${{ inputs.head_ref }})
+          echo "Checking changes between $base_ref and $head_ref"
+          
+          changed_files=$(git diff --name-only $base_ref $head_ref)
           echo "Changed files in commit range:"
           echo "$changed_files"
           
-          # Convert watched_files input to array (handle both newline and comma separation)
           watched_files=$(echo "${{ inputs.watched_files }}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-          
           echo "Watched files:"
           echo "$watched_files"
           
-          # Check if any watched file changed
           files_changed="false"
           changed_files_list=""
           
           while IFS= read -r watched_file; do
-            if [ -z "$watched_file" ]; then
-              continue
-            fi
-            
+            [ -z "$watched_file" ] && continue
             if echo "$changed_files" | grep -q "^${watched_file}$"; then
               files_changed="true"
               echo "✓ File changed: $watched_file"
-              if [ -z "$changed_files_list" ]; then
-                changed_files_list="$watched_file"
-              else
-                changed_files_list="$changed_files_list,$watched_file"
-              fi
+              changed_files_list="${changed_files_list:+$changed_files_list,}$watched_file"
             else
               echo "✗ File not changed: $watched_file"
             fi
