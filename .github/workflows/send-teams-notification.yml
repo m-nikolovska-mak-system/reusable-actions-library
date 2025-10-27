@@ -36,6 +36,8 @@ on:
         type: string
         default: 'View Changes'
     secrets:
+      webhook_url:
+        required: true
       teams_webhook_url:
         description: 'Microsoft Teams webhook URL (preferred over input)'
         required: false
@@ -44,6 +46,11 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
+      - name: Send Teams message
+        uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/send-teams-message@main
+        with:
+          webhook_url: ${{ secrets.webhook_url }}
+          message: ${{ inputs.message }}
       - name: Prepare Teams message
         id: prepare
         run: |
@@ -52,23 +59,24 @@ jobs:
           if [ -z "$webhook_url" ]; then
             webhook_url="${{ inputs.webhook_url }}"
           fi
-
+          
           if [ -z "$webhook_url" ]; then
             echo "ERROR: No webhook URL provided"
             exit 1
           fi
-
+          
           # Build facts array for changed files
           facts=""
           if [ -n "${{ inputs.changed_files }}" ]; then
             IFS=',' read -ra files <<< "${{ inputs.changed_files }}"
             for file in "${files[@]}"; do
+              # Escape quotes in filenames
               file=$(echo "$file" | sed 's/"/\\"/g')
               facts+=",{\"title\":\"Changed\",\"value\":\"${file}\"}"
             done
-            facts="${facts:1}"
+            facts="${facts:1}"  # Remove leading comma
           fi
-
+          
           # Build action buttons
           actions=""
           if [ -n "${{ inputs.link_url }}" ]; then
@@ -76,12 +84,12 @@ jobs:
             link_url=$(echo "${{ inputs.link_url }}" | sed 's/"/\\"/g')
             actions="\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"${link_text}\",\"url\":\"${link_url}\"}],"
           fi
-
-          # Escape title and message
+          
+          # Escape special characters in title and message
           title=$(echo "${{ inputs.title }}" | sed 's/"/\\"/g')
           message=$(echo "${{ inputs.message }}" | sed 's/"/\\"/g')
-
-          # Create payload
+          
+          # Create JSON payload
           cat > payload.json <<EOF
           {
             "type": "message",
@@ -106,10 +114,11 @@ jobs:
             }]
           }
           EOF
-
+          
           echo "Generated payload:"
           cat payload.json
-
+          
+          # Save webhook URL for next step (don't expose in logs)
           echo "webhook_url=$webhook_url" >> $GITHUB_OUTPUT
 
       - name: Send to Teams
@@ -118,17 +127,15 @@ jobs:
             -H "Content-Type: application/json" \
             -d @payload.json \
             "${{ steps.prepare.outputs.webhook_url }}")
-
+          
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | head -n -1)
-
-          if [ "$http_code" != "200" ] && [ "$http_code" != "202" ]; then
+          
+          if [ "$http_code" != "200" ]; then
             echo "❌ Failed to send Teams notification"
             echo "HTTP Status: $http_code"
             echo "Response: $body"
             exit 1
           fi
-
-          echo "✅ Teams notification sent successfully (HTTP $http_code)"
-
-
+          
+          echo "✅ Teams notification sent successfully"
