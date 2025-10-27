@@ -1,36 +1,32 @@
-# 🔁 Reusable Actions Library
+## Check File Changes Workflow
 
-A centralized library of reusable **GitHub Actions** and **composite steps** used across Mak System projects.
+Detects if specific files changed between two Git tags (current release vs previous release).
 
----
+### Features
+- Auto-detects previous tag if not provided.
+- Handles first release scenario.
+- Outputs:
+  - `files_changed`: `true` or `false`
+  - `changed_files_list`: Comma-separated list of changed files.
 
-## 📦 Available Reusable Workflows
+### Inputs
+| Name          | Description                              | Required | Default |
+|---------------|------------------------------------------|----------|---------|
+| `watched_files` | Files to watch (comma or newline separated) | ✅ | — |
+| `current_tag` | Current release tag                     | ❌ | `github.event.release.tag_name` |
+| `previous_tag`| Previous tag to compare against         | ❌ | Auto-detected |
 
-| Workflow | Description |
-|-----------|--------------|
-| **[release-file-watcher.yml](.github/workflows/release-file-watcher.yml)** | Detects file changes on release and sends a Teams notification |
-| **[send-teams-notification.yml](.github/workflows/send-teams-notification.yml)** | Generic Teams Adaptive Card workflow for CI/CD alerts |
+### Outputs
+| Name                | Description                              |
+|---------------------|------------------------------------------|
+| `files_changed`     | `true` if any watched files changed     |
+| `changed_files_list`| Comma-separated list of changed files   |
 
----
-
-## 🧱 Composite Actions
-
-| Action | Description |
-|---------|--------------|
-| **[check-file-changes](.github/actions/check-file-changes/action.yml)** | Detects changes between commits/tags |
-| **[send-teams-message](.github/actions/send-teams-message/action.yml)** | Sends a formatted Adaptive Card message to Microsoft Teams |
-
----
-
-## 🚀 Example Usage
-
+### Example Usage
 ```yaml
 jobs:
-  notify:
-    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/release-file-watcher.yml@main
+  check_file_changes:
+    uses: your-org/reusable-actions-library/.github/workflows/check-file-changes.yml@main
     with:
-      watched_file: 'src/java/com/miha/app/App.java'
-      notification_title: '🚀 App.java Changed!'
-      notification_message: '⚠️ Prepare new installer for Template Designer'
-    secrets:
-      teams_webhook_url: ${{ secrets.TEAMS_WEBHOOK_INSTALLER_URL }}
+      watched_files: 'src/java/com/miha/app/App.java'
+      current_tag: ${{ github.event.release.tag_name }}
