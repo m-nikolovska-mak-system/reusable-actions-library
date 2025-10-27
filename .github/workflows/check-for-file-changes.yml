@@ -1,34 +1,80 @@
-name: Check for File Changes
+name: Check File Changes
 
 on:
   workflow_call:
     inputs:
-      watched_file:
-        description: "File or directory to monitor"
+      watched_files:
+        description: 'Files to watch (one per line or comma-separated)'
+        required: true
+        type: string
+      base_ref:
+        description: 'Base git reference (e.g., previous tag)'
+        required: true
+        type: string
+      head_ref:
+        description: 'Head git reference (e.g., current tag)'
         required: true
         type: string
     outputs:
-      changed:
-        description: "True if watched file changed"
-        value: ${{ jobs.check.outputs.changed }}
-      changed_files:
-        description: "List of changed files"
-        value: ${{ jobs.check.outputs.changed_files }}
+      files_changed:
+        description: 'true if watched files changed, false otherwise'
+        value: ${{ jobs.check.outputs.files_changed }}
+      changed_files_list:
+        description: 'Comma-separated list of changed files'
+        value: ${{ jobs.check.outputs.changed_files_list }}
 
 jobs:
   check:
     runs-on: ubuntu-latest
     outputs:
-      changed: ${{ steps.diff.outputs.changed }}
-      changed_files: ${{ steps.diff.outputs.changed_files }}
-
+      files_changed: ${{ steps.check.outputs.files_changed }}
+      changed_files_list: ${{ steps.check.outputs.changed_files_list }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check file changes
-        id: diff
-        uses: m-nikolovska-mak-system/reusable-actions-library/.github/actions/check-file-changes@main
-        with:
-          target_file: ${{ inputs.watched_file }}
+      - name: Check for file changes
+        id: check
+        run: |
+          echo "Checking changes between ${{ inputs.base_ref }} and ${{ inputs.head_ref }}"
+          
+          # Get list of changed files
+          changed_files=$(git diff --name-only ${{ inputs.base_ref }} ${{ inputs.head_ref }})
+          echo "Changed files in commit range:"
+          echo "$changed_files"
+          
+          # Convert watched_files input to array (handle both newline and comma separation)
+          watched_files=$(echo "${{ inputs.watched_files }}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          
+          echo "Watched files:"
+          echo "$watched_files"
+          
+          # Check if any watched file changed
+          files_changed="false"
+          changed_files_list=""
+          
+          while IFS= read -r watched_file; do
+            if [ -z "$watched_file" ]; then
+              continue
+            fi
+            
+            if echo "$changed_files" | grep -q "^${watched_file}$"; then
+              files_changed="true"
+              echo "✓ File changed: $watched_file"
+              if [ -z "$changed_files_list" ]; then
+                changed_files_list="$watched_file"
+              else
+                changed_files_list="$changed_files_list,$watched_file"
+              fi
+            else
+              echo "✗ File not changed: $watched_file"
+            fi
+          done <<< "$watched_files"
+          
+          echo "files_changed=$files_changed" >> $GITHUB_OUTPUT
+          echo "changed_files_list=$changed_files_list" >> $GITHUB_OUTPUT
+          echo "==== Results ===="
+          echo "Files changed: $files_changed"
+          echo "Changed files list: $changed_files_list"
