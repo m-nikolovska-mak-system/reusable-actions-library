@@ -59,98 +59,96 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Prepare Teams message
-        id: prepare
-        run: |
-          webhook_url="${{ secrets.teams_webhook_url }}"
-          if [ -z "$webhook_url" ]; then
-            webhook_url="${{ inputs.webhook_url }}"
-          fi
-
-          if [ -z "$webhook_url" ]; then
-            echo "ERROR: No webhook URL provided"
-            exit 1
-          fi
-
-          # Escape inputs
-          title=$(echo "${{ inputs.title }}" | sed 's/"/\\"/g')
-          message=$(echo "${{ inputs.message }}" | sed 's/"/\\"/g')
-          release_version=$(echo "${{ inputs.release_version }}" | sed 's/"/\\"/g')
-          environment=$(echo "${{ inputs.environment }}" | sed 's/"/\\"/g')
-          released_by=$(echo "${{ inputs.released_by }}" | sed 's/"/\\"/g')
-          link_url=$(echo "${{ inputs.link_url }}" | sed 's/"/\\"/g')
-          link_text=$(echo "${{ inputs.link_text }}" | sed 's/"/\\"/g')
-
-          # Build changed files section
-          files_section=""
-          if [ -n "${{ inputs.changed_files }}" ]; then
-            IFS=',' read -ra files <<< "${{ inputs.changed_files }}"
-            for file in "${files[@]}"; do
-              files_section+="\n- $file"
-            done
-          fi
-
-         
-            # Build Adaptive Card JSON
-          cat > payload.json <<EOF
-          {
-            "type": "message",
-            "attachments": [{
-              "contentType": "application/vnd.microsoft.card.adaptive",
-              "content": {
-                "type": "AdaptiveCard",
-                "body": [
-                  {
-                    "type": "TextBlock",
-                    "text": "🚀 ${title}${release_version:+ (Release ${release_version})}",
-                    "size": "Large",
-                    "weight": "Bolder",
-                    "color": "Attention"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "⚠️ **Action Required:** ${message}",
-                    "wrap": true
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "🌍 Environment: ${environment}",
-                    "wrap": true
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "👤 Released By: ${released_by}",
-                    "wrap": true
-                  },
-                                   {
-                    "type": "Action.OpenUrl",
-                    "title": "${link_text}",
-                    "url": "${link_url}"
-                  }
-                    ,
-                  {
-                    "type": "TextBlock",
-                    "text": "📂 **Files Changed:**${files_section}",
-                    "wrap": true
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "📅 Timestamp: $(date '+%Y-%m-%d %H:%M %Z')",
-                    "wrap": true
-                  }
-                ],
-                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                "version": "1.4"
-              }
-            }]
-          }
-          EOF
-
-          echo "webhook_url=$webhook_url" >> $GITHUB_OUTPUT
+    - name: Prepare Teams message
+      id: prepare
+      run: |
+        webhook_url="${{ secrets.teams_webhook_url }}"
+        if [ -z "$webhook_url" ]; then
+          webhook_url="${{ inputs.webhook_url }}"
+        fi
+    
+        if [ -z "$webhook_url" ]; then
+          echo "ERROR: No webhook URL provided"
+          exit 1
+        fi
+    
+        # Escape inputs
+        title=$(echo "${{ inputs.title }}" | sed 's/"/\\"/g')
+        message=$(echo "${{ inputs.message }}" | sed 's/"/\\"/g')
+        release_version=$(echo "${{ inputs.release_version }}" | sed 's/"/\\"/g')
+        environment=$(echo "${{ inputs.environment }}" | sed 's/"/\\"/g')
+        released_by=$(echo "${{ inputs.released_by }}" | sed 's/"/\\"/g')
+        link_url=$(echo "${{ inputs.link_url }}" | sed 's/"/\\"/g')
+        link_text=$(echo "${{ inputs.link_text }}" | sed 's/"/\\"/g')
+    
+        # Prepare changed files facts
+        facts=""
+        if [ -n "${{ inputs.changed_files }}" ]; then
+          IFS=',' read -ra files <<< "${{ inputs.changed_files }}"
+          for file in "${files[@]}"; do
+            file=$(echo "$file" | sed 's/"/\\"/g')
+            facts+=",{\"title\":\"Changed\",\"value\":\"${file}\"}"
+          done
+          facts="${facts:1}"
+        fi
+    
+        # Prepare action buttons
+        actions=""
+        if [ -n "$link_url" ]; then
+          actions="\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"${link_text}\",\"url\":\"${link_url}\"}],"
+        fi
+    
+        # Create payload
+        cat > payload.json <<EOF
+        {
+          "type": "message",
+          "attachments": [{
+            "contentType": "application/vnd.microsoft.card.adaptive",
+            "content": {
+              "type": "AdaptiveCard",
+              "body": [
+                {
+                  "type": "TextBlock",
+                  "size": "Large",
+                  "weight": "Bolder",
+                  "text": "${title}${release_version:+ (Release ${release_version})}"
+                },
+                {
+                  "type": "TextBlock",
+                  "text": "⚠️ ${message}",
+                  "wrap": true
+                },
+                {
+                  "type": "TextBlock",
+                  "text": "🌍 Environment: ${environment}",
+                  "wrap": true
+                },
+                {
+                  "type": "TextBlock",
+                  "text": "👤 Released By: ${released_by}",
+                  "wrap": true
+                }
+                ${facts:+,{"type":"FactSet","facts":[$facts]}},
+                {
+                  "type": "TextBlock",
+                  "text": "📅 Timestamp: $(date '+%Y-%m-%d %H:%M %Z')",
+                  "wrap": true
+                }
+              ],
+              ${actions}
+              "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+              "version": "1.4"
+            }
+          }]
+        }
+        EOF
+    
+        echo "webhook_url=$webhook_url" >> $GITHUB_OUTPUT
 
 
-      - name: Send to Teams
-        run: |
+
+    - name: Send to Teams
+      run: |
           response=$(curl -s -w "\n%{http_code}" \
             -H "Content-Type: application/json" \
             -d @payload.json \
