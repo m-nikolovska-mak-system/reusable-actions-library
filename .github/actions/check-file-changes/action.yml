@@ -1,95 +1,56 @@
 name: 'Check File Changes'
-description: 'Detects if specific files changed between git references (tags, commits, branches)'
+description: 'Detects if specific files changed between two git references'
 
 inputs:
-  target_file:
-    description: 'File or directory path to monitor (e.g., src/App.java or src/)'
+  watched_files:
+    description: 'Files to watch (one per line or comma-separated)'
     required: true
-  from_ref:
-    description: 'Starting git reference (tag, commit, branch). If empty, uses previous tag.'
-    required: false
-    default: ''
-  to_ref:
-    description: 'Ending git reference. Defaults to current commit.'
-    required: false
-    default: ''
+  base_ref:
+    description: 'Base git reference (tag, commit, branch)'
+    required: true
+  head_ref:
+    description: 'Head git reference to compare against'
+    required: true
 
 outputs:
-  changed:
-    description: 'Whether the target file/path changed (true/false)'
-    value: ${{ steps.check.outputs.changed }}
-  changed_files:
-    description: 'List of all changed files (newline-separated)'
-    value: ${{ steps.check.outputs.changed_files }}
-  from_ref:
-    description: 'The actual from reference used'
-    value: ${{ steps.check.outputs.from_ref }}
-  to_ref:
-    description: 'The actual to reference used'
-    value: ${{ steps.check.outputs.to_ref }}
+  files_changed:
+    description: 'true if any watched files changed, false otherwise'
+    value: ${{ steps.check.outputs.files_changed }}
+  changed_files_list:
+    description: 'List of changed files that were watched'
+    value: ${{ steps.check.outputs.changed_files_list }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Detect file or directory changes
+    - name: Check for file changes
       id: check
       shell: bash
       run: |
-        set -e
-        echo "🔍 Checking if '${{ inputs.target_file }}' changed..."
+        echo "Checking changes between ${{ inputs.base_ref }} and ${{ inputs.head_ref }}"
         
-        TARGET="${{ inputs.target_file }}"
-        FROM_REF="${{ inputs.from_ref }}"
-        TO_REF="${{ inputs.to_ref }}"
+        # Get list of changed files
+        changed_files=$(git diff --name-only ${{ inputs.base_ref }} ${{ inputs.head_ref }})
         
-        # Determine TO reference
-        if [ -z "$TO_REF" ]; then
-          TO_REF="${{ github.sha }}"
-        fi
+        # Convert watched_files input to array (handle both newline and comma separation)
+        watched_files=$(echo "${{ inputs.watched_files }}" | tr ',' '\n' | tr -d ' ')
         
-        # Determine FROM reference
-        if [ -z "$FROM_REF" ]; then
-          CURRENT_TAG="${{ github.event.release.tag_name }}"
-          if [ -n "$CURRENT_TAG" ]; then
-            # Get previous tag in chronological order
-            PREV_TAG=$(git tag --sort=-creatordate | grep -B1 "^${CURRENT_TAG}$" | head -n1 || echo "")
-            if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURRENT_TAG" ]; then
-              echo "⚠️ No previous tag found - comparing against initial commit"
-              FROM_REF=$(git rev-list --max-parents=0 HEAD)
+        # Check if any watched file changed
+        files_changed="false"
+        changed_files_list=""
+        
+        while IFS= read -r watched_file; do
+          if echo "$changed_files" | grep -q "^${watched_file}$"; then
+            files_changed="true"
+            if [ -z "$changed_files_list" ]; then
+              changed_files_list="$watched_file"
             else
-              FROM_REF="$PREV_TAG"
+              changed_files_list="$changed_files_list,$watched_file"
             fi
-          else
-            # Fallback: compare with previous commit
-            FROM_REF="HEAD~1"
           fi
-        fi
+        done <<< "$watched_files"
         
-        echo "📊 Comparing: $FROM_REF → $TO_REF"
-        echo "from_ref=$FROM_REF" >> $GITHUB_OUTPUT
-        echo "to_ref=$TO_REF" >> $GITHUB_OUTPUT
-        
-        # Get changed files
-        CHANGED_FILES=$(git diff --name-only "$FROM_REF" "$TO_REF" || echo "")
-        
-        if [ -z "$CHANGED_FILES" ]; then
-          echo "ℹ️ No files changed"
-          echo "changed=false" >> $GITHUB_OUTPUT
-          echo "changed_files=" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        # Set changed_files output
-        echo "changed_files<<EOF" >> $GITHUB_OUTPUT
-        echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        # Check if target file or any file inside target directory changed
-        if echo "$CHANGED_FILES" | grep -qE "^${TARGET}(/|$)"; then
-          echo "✅ Target '$TARGET' WAS changed!"
-          echo "changed=true" >> $GITHUB_OUTPUT
-        else
-          echo "ℹ️ Target '$TARGET' was NOT changed"
-          echo "changed=false" >> $GITHUB_OUTPUT
-        fi
-
+        echo "files_changed=$files_changed" >> $GITHUB_OUTPUT
+        echo "changed_files_list=$changed_files_list" >> $GITHUB_OUTPUT
+        echo "Files changed: $files_changed"
+        echo "Changed files: $changed_files_list"
