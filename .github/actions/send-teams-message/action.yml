@@ -1,41 +1,98 @@
-name: 'Send Teams Message'
-description: 'Sends a minimal Microsoft Teams notification'
+name: 'Send Teams Notification'
+description: 'Sends an Adaptive Card notification to Microsoft Teams'
 
 inputs:
   webhook_url:
     description: 'Microsoft Teams webhook URL'
     required: true
   title:
-    description: 'Title of the message (optional)'
-    required: false
+    description: 'Notification title'
+    required: true
   message:
-    description: 'Message to display'
+    description: 'Notification message'
     required: true
   color:
-    description: 'Color (optional)'
+    description: 'Card color (Attention, Good, Warning, Default)'
     required: false
-  show_files:
-    description: 'Show changed files (optional)'
-    required: false
+    default: 'Default'
   changed_files:
-    description: 'List of changed files (optional)'
+    description: 'List of changed files to display'
     required: false
+    default: ''
   link_url:
-    description: 'URL for more details (e.g. commit or release link)'
+    description: 'URL to link to (e.g., commit, release)'
     required: false
-
+    default: ''
+  link_text:
+    description: 'Link button text'
+    required: false
+    default: 'View Changes'
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
-    - name: Send Teams Adaptive Card
+    - name: Prepare card payload
+      id: payload
       shell: bash
       run: |
-        bash "${{ github.action_path }}/send-teams-message.sh" \
-          "${{ inputs.webhook_url }}" \
-          "${{ inputs.title }}" \
-          "${{ inputs.message }}" \
-          "${{ inputs.color }}" \
-          "${{ inputs.show_files }}" \
-          "${{ inputs.changed_files }}" \
-          "${{ inputs.link_url }}"
+        # Map color names to hex values
+        case "${{ inputs.color }}" in
+          "Attention"|"attention") color="Attention" ;;
+          "Good"|"good") color="Good" ;;
+          "Warning"|"warning") color="Warning" ;;
+          *) color="Default" ;;
+        esac
+        
+        # Build facts array for changed files
+        facts=""
+        if [ -n "${{ inputs.changed_files }}" ]; then
+          IFS=',' read -ra files <<< "${{ inputs.changed_files }}"
+          for file in "${files[@]}"; do
+            facts+=",{\"title\":\"Changed\",\"value\":\"${file}\"}"
+          done
+          facts="${facts:1}" # Remove leading comma
+        fi
+        
+        # Build action buttons
+        actions=""
+        if [ -n "${{ inputs.link_url }}" ]; then
+          actions="\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"${{ inputs.link_text }}\",\"url\":\"${{ inputs.link_url }}\"}],"
+        fi
+        
+        # Create JSON payload
+        cat > payload.json <<EOF
+        {
+          "type": "message",
+          "attachments": [{
+            "contentType": "application/vnd.microsoft.card.adaptive",
+            "content": {
+              "type": "AdaptiveCard",
+              "body": [{
+                "type": "TextBlock",
+                "size": "Large",
+                "weight": "Bolder",
+                "text": "${{ inputs.title }}"
+              },{
+                "type": "TextBlock",
+                "text": "${{ inputs.message }}",
+                "wrap": true
+              }${facts:+,{\"type\":\"FactSet\",\"facts\":[$facts]}}],
+              ${actions}
+              "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+              "version": "1.4",
+              "msteams": {
+                "width": "Full"
+              }
+            }
+          }]
+        }
+        EOF
+        
+        cat payload.json
+
+    - name: Send to Teams
+      shell: bash
+      run: |
+        curl -H "Content-Type: application/json" \
+             -d @payload.json \
+             "${{ inputs.webhook_url }}"
