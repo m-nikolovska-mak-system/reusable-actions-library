@@ -115,7 +115,7 @@ jobs:
                     "type": "TextBlock",
                     "text": "🌍 Environment: ${environment}",
                     "wrap": true
-                  },
+                  },{
                     "text": "👤 Released By: ${released_by}",
                     "wrap": true
                   },
