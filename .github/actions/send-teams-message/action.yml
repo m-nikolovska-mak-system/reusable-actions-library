@@ -14,6 +14,7 @@ inputs:
   color:
     description: 'Card color (Attention, Good, Warning, Default)'
     required: false
+    type: string
     default: 'Default'
   changed_files:
     description: 'List of changed files to display'
