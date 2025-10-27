@@ -1,18 +1,24 @@
 # 🔄 Reusable GitHub Actions Workflows
 
-This repository contains reusable workflows for automating **Microsoft Teams notifications** and **file change detection** during GitHub releases. These workflows help teams stay informed about critical changes and streamline release processes.
+This repository provides **reusable GitHub Actions workflows** for automating:
+- ✅ Detecting file changes between release tags
+- ✅ Sending rich Microsoft Teams notifications with release details
+
+These workflows help teams stay informed about critical changes and streamline release processes.
 
 ---
 
-## ✅ Workflows Included
-1. **Check File Changes**  
-   Detects if specific files have changed between two Git tags (current release vs previous release).
-2. **Send Teams Notification**  
-   Sends a rich Adaptive Card notification to Microsoft Teams with release details and changed files.
+## 📦 Workflows Included
+
+### 1. **Check File Changes**
+Detects if specific files have changed between two Git tags (current release vs previous release).
+
+### 2. **Send Teams Notification**
+Sends a Microsoft Teams Adaptive Card notification with release details, changed files, and a link to the release.
 
 ---
 
-## 📂 1. Check File Changes Workflow
+## ✅ 1. Check File Changes Workflow
 
 ### **Purpose**
 Compares the current release tag against the previous tag and checks if specified files have changed.
