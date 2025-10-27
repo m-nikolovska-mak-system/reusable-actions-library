@@ -3,20 +3,6 @@ name: Send Teams Notification
 on:
   workflow_call:
     inputs:
-      release_version:
-        description: 'Release version'
-        required: false
-        type: string
-        default: ''
-      released_by:
-        description: 'Who triggered the release'
-        required: false
-        type: string
-        default: ''
-      webhook_url:
-        description: 'Microsoft Teams webhook URL (use secrets for security)'
-        required: false
-        type: string
       title:
         description: 'Notification title'
         required: true
@@ -25,11 +11,21 @@ on:
         description: 'Notification message'
         required: true
         type: string
+      release_version:
+        description: 'Release version/tag'
+        required: false
+        type: string
+        default: ''
+      released_by:
+        description: 'Who triggered the release'
+        required: false
+        type: string
+        default: ''
       color:
         description: 'Card color (Attention, Good, Warning, Default)'
         required: false
         type: string
-        default: 'Default'
+        default: 'Attention'
       changed_files:
         description: 'Comma-separated list of changed files'
         required: false
@@ -47,131 +43,177 @@ on:
         default: 'View Release'
     secrets:
       teams_webhook_url:
-        description: 'Microsoft Teams webhook URL (preferred over input)'
+        description: 'Microsoft Teams webhook URL'
         required: true
 
 jobs:
-  notify:
+  send-notification:
     runs-on: ubuntu-latest
+    
     steps:
-        
-    - name: Prepare Teams message
-      id: prepare
-      run: |
-        webhook_url="${{ secrets.teams_webhook_url }}"
-        if [ -z "$webhook_url" ]; then
-          webhook_url="${{ inputs.webhook_url }}"
-        fi
-    
-        if [ -z "$webhook_url" ]; then
-          echo "ERROR: No webhook URL provided"
-          exit 1
-        fi
-    
-        # Escape inputs
-        title=$(echo "${{ inputs.title }}" | sed 's/"/\\"/g')
-        message=$(echo "${{ inputs.message }}" | sed 's/"/\\"/g')
-        release_version=$(echo "${{ inputs.release_version }}" | sed 's/"/\\"/g')
-        released_by=$(echo "${{ inputs.released_by }}" | sed 's/"/\\"/g')
-        link_url=$(echo "${{ inputs.link_url }}" | sed 's/"/\\"/g')
-        link_text=$(echo "${{ inputs.link_text }}" | sed 's/"/\\"/g')
-    
-        # Prepare files section (bullet list)
-        files_section=""
-        if [ -n "${{ inputs.changed_files }}" ]; then
-          IFS=',' read -ra files <<< "${{ inputs.changed_files }}"
-          for file in "${files[@]}"; do
-            files_section+="\n- $file"
-          done
-        fi
-    
-        # Timestamp in CET/CEST
-        sudo apt-get install -y tzdata
-        export TZ="Europe/Skopje"
-        timestamp=$(date '+%Y-%m-%d %H:%M %Z')
-    
+      - name: Validate inputs
+        run: |
+          set -e
           
+          if [ -z "${{ secrets.teams_webhook_url }}" ]; then
+            echo "❌ ERROR: teams_webhook_url secret is not set"
+            exit 1
+          fi
           
-        # Create payload
-    
-        # Build Adaptive Card JSON
-        cat > payload.json <<EOF
-        {
-          "type": "message",
-          "attachments": [{
-            "contentType": "application/vnd.microsoft.card.adaptive",
-            "content": {
-              "type": "AdaptiveCard",
-              "body": [
-                {
-                  "type": "TextBlock",
-                  "text": "🚀 ${title}${release_version:+ (Release ${release_version})}",
-                  "size": "Large",
-                  "weight": "Bolder",
-                  "color": "Attention"
-                },
-                {
-                  "type": "TextBlock",
-                  "text": "⚠️ **Action Required:** ${message}",
-                  "wrap": true
-                },
-                            {
-                  "type": "TextBlock",
-                  "text": "👤 Released By: ${released_by}",
-                  "wrap": true
-                },
-              
-                {
-                  "type": "TextBlock",
-                  "text": "📂 Files Changed:",
-                  "weight": "Bolder",
-                  "wrap": true
-                },
-                {
-                  "type": "TextBlock",
-                  "text": "${files_section}",
-                  "wrap": true
-                },
+          if [ -z "${{ inputs.title }}" ]; then
+            echo "❌ ERROR: title is required"
+            exit 1
+          fi
+          
+          if [ -z "${{ inputs.message }}" ]; then
+            echo "❌ ERROR: message is required"
+            exit 1
+          fi
+          
+          echo "✅ Inputs validated successfully"
 
-                {
-                  "type": "TextBlock",
-                  "text": "📅 Timestamp: $(date '+%Y-%m-%d %H:%M %Z')",
-                  "wrap": true
-                }
-              ],
-              "actions": [
-                {
-                  "type": "Action.OpenUrl",
-                  "title": "${link_text}",
-                  "url": "${link_url}"
-                }
-              ],
-              "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-              "version": "1.4"
-            }
-          }]
-        }
-        EOF
-        
-        echo "webhook_url=$webhook_url" >> $GITHUB_OUTPUT
-        
-        
+      - name: Prepare Teams Adaptive Card
+        id: prepare
+        run: |
+          set -e
+          
+          echo "=========================================="
+          echo "Preparing Teams notification"
+          echo "=========================================="
+          
+          # Escape special characters for JSON
+          title=$(echo "${{ inputs.title }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          message=$(echo "${{ inputs.message }}" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/g' | tr -d '\n' | sed 's/\\n$//')
+          release_version=$(echo "${{ inputs.release_version }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          released_by=$(echo "${{ inputs.released_by }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          link_url=$(echo "${{ inputs.link_url }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          link_text=$(echo "${{ inputs.link_text }}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          
+          # Set color based on input
+          case "${{ inputs.color }}" in
+            "Attention"|"attention") card_color="Attention" ;;
+            "Good"|"good") card_color="Good" ;;
+            "Warning"|"warning") card_color="Warning" ;;
+            *) card_color="Attention" ;;
+          esac
+          
+          # Prepare changed files as bullet list
+          files_section=""
+          if [ -n "${{ inputs.changed_files }}" ]; then
+            echo "Changed files detected:"
+            IFS=',' read -ra files <<< "${{ inputs.changed_files }}"
+            for file in "${files[@]}"; do
+              file=$(echo "$file" | sed 's/\\/\\\\/g; s/"/\\"/g')
+              echo "  - $file"
+              files_section+="- ${file}\\n"
+            done
+            # Remove trailing newline
+            files_section=$(echo "$files_section" | sed 's/\\n$//')
+          else
+            files_section="No specific files tracked"
+          fi
+          
+          # Get timestamp in Europe/Skopje timezone
+          export TZ="Europe/Skopje"
+          timestamp=$(date '+%Y-%m-%d %H:%M %Z')
+          
+          echo "Title: ${{ inputs.title }}"
+          echo "Release: ${release_version:-N/A}"
+          echo "Released by: ${released_by:-N/A}"
+          echo "Timestamp: $timestamp"
+          
+          # Build optional sections
+          release_section=""
+          if [ -n "$release_version" ]; then
+            release_section=",{\"type\":\"TextBlock\",\"text\":\"📦 Release: ${release_version}\",\"wrap\":true}"
+          fi
+          
+          released_by_section=""
+          if [ -n "$released_by" ]; then
+            released_by_section=",{\"type\":\"TextBlock\",\"text\":\"👤 Released By: ${released_by}\",\"wrap\":true}"
+          fi
+          
+          files_header_section=""
+          files_content_section=""
+          if [ -n "${{ inputs.changed_files }}" ]; then
+            files_header_section=",{\"type\":\"TextBlock\",\"text\":\"📂 Files Changed:\",\"weight\":\"Bolder\",\"wrap\":true}"
+            files_content_section=",{\"type\":\"TextBlock\",\"text\":\"${files_section}\",\"wrap\":true,\"spacing\":\"None\"}"
+          fi
+          
+          actions_section=""
+          if [ -n "$link_url" ]; then
+            actions_section="\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"${link_text}\",\"url\":\"${link_url}\"}],"
+          fi
+          
+          # Create Adaptive Card payload
+          cat > payload.json <<EOF
+          {
+            "type": "message",
+            "attachments": [{
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "type": "AdaptiveCard",
+                "body": [
+                  {
+                    "type": "TextBlock",
+                    "text": "${title}",
+                    "size": "Large",
+                    "weight": "Bolder",
+                    "color": "${card_color}"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "${message}",
+                    "wrap": true,
+                    "spacing": "Medium"
+                  }${release_section}${released_by_section}${files_header_section}${files_content_section},
+                  {
+                    "type": "TextBlock",
+                    "text": "📅 ${timestamp}",
+                    "wrap": true,
+                    "size": "Small",
+                    "isSubtle": true,
+                    "spacing": "Medium"
+                  }
+                ],
+                ${actions_section}
+                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.4"
+              }
+            }]
+          }
+          EOF
+          
+          echo ""
+          echo "Generated payload:"
+          cat payload.json
+          echo ""
 
-    - name: Send to Teams
-      run: |
+      - name: Send to Microsoft Teams
+        run: |
+          set -e
+          
+          echo "=========================================="
+          echo "Sending notification to Teams..."
+          echo "=========================================="
+          
           response=$(curl -s -w "\n%{http_code}" \
             -H "Content-Type: application/json" \
             -d @payload.json \
-            "${{ steps.prepare.outputs.webhook_url }}")
-
+            "${{ secrets.teams_webhook_url }}")
+          
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | head -n -1)
-
-          if [[ "$http_code" != 2* ]]; then
+          
+          echo "HTTP Status Code: $http_code"
+          
+          # Teams returns 200 or 202 on success
+          if [ "$http_code" = "200" ] || [ "$http_code" = "202" ]; then
+            echo "✅ Teams notification sent successfully!"
+            echo "=========================================="
+          else
             echo "❌ Failed to send Teams notification"
-            echo "HTTP Status: $http_code"
-            echo "Response: $body"
+            echo "Response body: $body"
+            echo "=========================================="
             exit 1
           fi
-
-          echo "✅ Teams notification sent successfully"
