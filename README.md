@@ -14,6 +14,8 @@ These workflows help engineering teams stay informed about critical changes and 
 |-----------|--------------|------|
 | [check-for-file-changes.yml](.github/workflows/check-for-file-changes.yml) | Detects if specified files changed between Git tags | – |
 | [send-teams-notification.yml](.github/workflows/send-teams-notification.yml) | Sends customizable Microsoft Teams Adaptive Card notifications | [Setup Guide →](./docs/send-teams-notification.md) |
+| [build-installer.yml](.github/workflows/build-installer.yml) | Builds a Windows installer (`.exe`) from a JAR using Inno Setup | [Setup Guide →](./docs/build-installer.md) |
+
 
 ---
 
@@ -23,7 +25,7 @@ name: Notify on App.java Changes
 
 on:
   release:
-	@@ -30,23 +29,12 @@ permissions:
+  permissions:
   contents: read
 
 jobs:
