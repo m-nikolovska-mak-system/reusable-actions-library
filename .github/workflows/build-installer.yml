@@ -1,0 +1,142 @@
+name: Build Installer
+on:
+  workflow_call:
+    inputs:
+      jar_cache_key:
+        required: true
+        type: string
+      release_tag:
+        required: false
+        type: string
+        default: "main"
+      setup_script:
+        required: true
+        type: string
+      app_name:
+        required: true
+        type: string
+      app_version:
+        required: true
+        type: string
+      output_name:
+        required: true
+        type: string
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    env:
+      APP_NAME: ${{ inputs.app_name }}
+      APP_VERSION: ${{ inputs.app_version }}
+      OUTPUT_NAME: ${{ inputs.output_name }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+          
+      - name: Restore cached JAR
+        uses: actions/cache/restore@v3
+        with:
+          path: build/libs/*.jar
+          key: ${{ inputs.jar_cache_key }}
+          
+      - name: Check JAR presence
+        run: |
+          if (!(Test-Path "build\libs\*.jar")) {
+            Write-Error "JAR file not found after cache restore."
+            exit 1
+          }
+          
+      - name: Get JAR filename
+        id: jar-name
+        run: |
+          $jar = Get-ChildItem "build\libs" -Filter *.jar -ErrorAction Stop | Select-Object -First 1
+          if (!$jar) {
+            Write-Error "No JAR file found!"
+            exit 1
+          }
+          echo "jar_file=$($jar.Name)" >> $env:GITHUB_OUTPUT
+          echo "Found JAR: $($jar.Name)"
+      
+         
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+        
+      - name: Validate Inno Setup install
+        run: |
+          if (!(Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
+            Write-Error "Inno Setup not installed correctly."
+            exit 1
+          }
+                
+      - name: Build setup.exe with Inno Setup
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+      
+          echo "=== Preparing Inno Setup build ==="
+      
+          # Find ISCC dynamically
+          $issCmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          if ($null -eq $issCmd) {
+              Write-Error "❌ Could not find ISCC.exe on PATH. Inno Setup may not be installed."
+              exit 1
+          }
+          $issPath = $issCmd.Source
+          echo "✅ Found Inno Setup compiler at: $issPath"
+      
+          # Ensure output directory exists
+          if (!(Test-Path "output")) { New-Item -ItemType Directory -Path "output" | Out-Null }
+      
+          # Log parameters
+          echo "Building with parameters:"
+          echo "  AppName:     ${{ inputs.app_name }}"
+          echo "  AppVersion:  ${{ inputs.app_version }}"
+          echo "  JarFileName: ${{ steps.jar-name.outputs.jar_file }}"
+          echo "  OutputName:  ${{ inputs.output_name }}"
+          echo "  Script:      ${{ inputs.setup_script }}"
+      
+          # Run ISCC
+          & $issPath `
+            /DAppName=${{ inputs.app_name }} `
+            /DAppVersion=${{ inputs.app_version }} `
+            /DJarFileName=${{ steps.jar-name.outputs.jar_file }} `
+            /DOutputBaseName=${{ inputs.output_name }} `
+            "${{ inputs.setup_script }}" 2>&1 | Tee-Object -FilePath build-log.txt
+      
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ ISCC failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+      
+          echo "✅ Build completed successfully!"
+
+      - name: Debug - Check what was created
+        run: |
+          echo "=== Contents of output directory ==="
+          if (Test-Path "output") {
+            Get-ChildItem output -Force
+          } else {
+            echo "❌ Output directory does not exist!"
+          }
+          
+          echo "`n=== All EXE files in workspace ==="
+          Get-ChildItem . -Recurse -Filter *.exe -ErrorAction SilentlyContinue | Select-Object FullName
+          
+          echo "`n=== Current directory ==="
+          Get-Location
+          
+          echo "`n=== Build log (last 50 lines) ==="
+          if (Test-Path "build-log.txt") {
+            Get-Content build-log.txt -Tail 50
+          }
+      
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup-installer
+          path: output/*.exe  
+                
+      - name: Installer Build Complete
+        run: echo "✅ Installer successfully built and uploaded."
