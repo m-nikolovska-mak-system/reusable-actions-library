@@ -1,40 +1,49 @@
-🔄 Reusable GitHub Actions Workflows
-This repository provides reusable GitHub Actions workflows for automating:
+# 🔄 Reusable GitHub Actions Workflows
 
-✅ Detecting file changes between release tags  
-✅ Sending Microsoft Teams Adaptive Card notifications  
-✅ Building Windows installers with Inno Setup  
+This repository provides reusable GitHub Actions workflows for automating:
+- ✅ Detecting file changes between release tags  
+- ✅ Sending Microsoft Teams Adaptive Card notifications  
 
 These workflows help engineering teams stay informed about critical changes and streamline release processes.
 
-📦 Available Workflows
+---
+
+## 📦 Available Workflows
 
 | Workflow | Description | Docs |
-|----------|------------|------|
-| check-for-file-changes.yml | Detects if specified files changed between Git tags | – |
-| send-teams-notification.yml | Sends customizable Microsoft Teams Adaptive Card notifications | Setup Guide → |
-| build-installer.yml | Builds a Windows installer from a JAR using Inno Setup | Setup Guide → |
+|-----------|--------------|------|
+| [check-for-file-changes.yml](.github/workflows/check-for-file-changes.yml) | Detects if specified files changed between Git tags | – |
+| [send-teams-notification.yml](.github/workflows/send-teams-notification.yml) | Sends customizable Microsoft Teams Adaptive Card notifications | [Setup Guide →](./docs/send-teams-notification.md) |
 
-✅ Example Combined Usage – Build Installer on Release
+---
 
+## ✅ Example Combined Usage
 ```yaml
-name: Build Installer for MyApp
+name: Notify on App.java Changes
 
 on:
   release:
-    types: [published]
-  workflow_dispatch:
-
-permissions:
+	@@ -30,23 +29,12 @@ permissions:
   contents: read
 
 jobs:
-  build_installer:
-    uses: your-org/reusable-actions-library/.github/workflows/build-installer.yml@main
+  check_file_changes:
+    uses: your-org/reusable-actions-library/.github/workflows/check-for-file-changes.yml@main
     with:
-      jar_cache_key: "jar-${{ github.event.release.tag_name }}"
-      release_tag: ${{ github.event.release.tag_name }}
-      setup_script: "installer.iss"
-      app_name: "MyApp"
-      app_version: ${{ github.event.release.tag_name }}
-      output_name: "Setup-${{ github.event.release.tag_name }}"
+      watched_files: 'src/java/com/miha/app/App.java'
+
+  send_teams_notification:
+    needs: check_file_changes
+    if: needs.check_file_changes.outputs.files_changed == 'true'
+    uses: your-org/reusable-actions-library/.github/workflows/send-teams-notification.yml@main
+    with:
+      title: '🚀 App.java Changed in Release'
+      message: '⚠️ **Action Required:** Prepare new installer for Template Designer'
+      release_version: ${{ github.event.release.tag_name }}
+      released_by: ${{ github.actor }}
+      color: 'Warning'
+      changed_files: ${{ needs.check_file_changes.outputs.changed_files_list }}
+      link_url: ${{ github.event.release.html_url }}
+      link_text: 'View Release'
+    secrets:
+      teams_webhook_url: ${{ secrets.TEAMS_WEBHOOK_INSTALLER_URL }}
