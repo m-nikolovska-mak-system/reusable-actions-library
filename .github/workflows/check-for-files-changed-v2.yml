@@ -38,7 +38,7 @@ jobs:
       - name: Checkout reusable workflow repo
         uses: actions/checkout@v4
         with:
-          repository: m-nikolovska-mak-system/github-reusable-workflows  # your reusable repo
+          repository: m-nikolovska-mak-system/reusable-actions-library  # your reusable repo
           path: reusable
           ref: main  # or whichever branch you’re testing
 
