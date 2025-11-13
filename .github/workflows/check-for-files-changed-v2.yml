@@ -40,7 +40,7 @@ jobs:
         with:
           repository: m-nikolovska-mak-system/reusable-actions-library  # your reusable repo
           path: reusable
-          ref: main  # or whichever branch you’re testing
+          ref: main  
 
       - name: Make helper scripts executable
         run: |
