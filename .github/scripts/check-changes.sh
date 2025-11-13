@@ -37,13 +37,14 @@ changed_files_list=""
 while IFS= read -r watched_file; do
   [ -z "$watched_file" ] && continue
 
-  if echo "$changed_files" | grep -Fxq "$watched_file"; then
-    files_changed="true"
-    echo "  ✓ CHANGED: $watched_file"
-    changed_files_list="${changed_files_list:+$changed_files_list,}$watched_file"
-  else
-    echo "  ✗ No change: $watched_file"
-  fi
+if echo "$changed_files" | grep -E -q "$(echo "$watched_file" | sed 's/\./\\./g; s/\*/.*/g; s/\?/./g')"; then
+  files_changed="true"
+  echo "  ✓ CHANGED: $watched_file"
+  changed_files_list="${changed_files_list:+$changed_files_list,}$watched_file"
+else
+  echo "  ✗ No change: $watched_file"
+fi
+
 done <<< "$watched_files"
 
 echo ""
