@@ -173,25 +173,6 @@ jobs:
 
 ---
 
-## 🏗️ Architecture & Best Practices
-
-### Versioning Strategy
-We use branch-based versioning:
-
-- **`@main`** - Latest stable version (recommended for most users)
-- **`@v1`** - Major version branch (stable, receives bug fixes)
-- **`@v1.2.3`** - Specific version tags (for absolute stability)
-
-**Recommended:** Use `@main` for automatic updates with stability:
-```yaml
-uses: YOUR-ORG/reusable-actions-library/.github/workflows/send-teams-notification.yml@main
-```
-
-**For production-critical workflows:** Pin to a specific version:
-```yaml
-uses: YOUR-ORG/reusable-actions-library/.github/workflows/send-teams-notification.yml@v1.0.0
-```
-
 ### Security Best Practices
 
 1. **Always use secrets for sensitive data:**
