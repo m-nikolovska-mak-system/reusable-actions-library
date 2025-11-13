@@ -1,0 +1,61 @@
+name: Notify on File Changes
+
+on:
+  workflow_call:
+    inputs:
+      watched_files:
+        required: true
+        type: string
+      title:
+        required: false
+        type: string
+        default: '🚀 File Change Detected'
+      message:
+        required: false
+        type: string
+        default: 'Some watched files were changed in this release.'
+      current_tag:
+        required: false
+        type: string
+        default: ''
+      previous_tag:
+        required: false
+        type: string
+        default: ''
+      color:
+        required: false
+        type: string
+        default: 'Warning'
+      link_url:
+        required: false
+        type: string
+        default: ''
+      link_text:
+        required: false
+        type: string
+        default: 'View Release'
+    secrets:
+      teams_webhook_url:
+        required: true
+
+jobs:
+  check_files:
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/check-for-file-changes.yml@main
+    with:
+      watched_files: ${{ inputs.watched_files }}
+      current_tag: ${{ inputs.current_tag }}
+      previous_tag: ${{ inputs.previous_tag }}
+
+  notify_teams:
+    needs: check_files
+    if: needs.check_files.outputs.files_changed == 'true'
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/send-teams-notification.yml@main
+    with:
+      title: ${{ inputs.title }}
+      message: ${{ inputs.message }}
+      changed_files: ${{ needs.check_files.outputs.changed_files_list }}
+      color: ${{ inputs.color }}
+      link_url: ${{ inputs.link_url }}
+      link_text: ${{ inputs.link_text }}
+    secrets:
+      teams_webhook_url: ${{ secrets.teams_webhook_url }}
