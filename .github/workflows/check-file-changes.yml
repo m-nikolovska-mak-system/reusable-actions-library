@@ -1,0 +1,63 @@
+name: Check File Changes (Universal)
+
+on:
+  workflow_call:
+    inputs:
+      watched_files:
+        description: 'Glob patterns for files to watch (newline or comma-separated)'
+        required: true
+        type: string
+      base_ref:
+        description: 'Base branch or tag to compare against (defaults to main)'
+        required: false
+        type: string
+        default: main
+      head_ref:
+        description: 'Head branch or tag (auto-detected from context if not set)'
+        required: false
+        type: string
+        default: ''
+    outputs:
+      files_changed:
+        description: 'true if watched files have changed'
+        value: ${{ jobs.detect.outputs.files_changed }}
+      changed_files_list:
+        description: 'Comma-separated list of changed files'
+        value: ${{ jobs.detect.outputs.changed_files_list }}
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      files_changed: ${{ steps.changes.outputs.any_changed }}
+      changed_files_list: ${{ steps.changes.outputs.all_changed_files }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Auto-detect refs
+        id: refs
+        run: |
+          base="${{ inputs.base_ref }}"
+          head="${{ inputs.head_ref }}"
+          # If running on release, set head_ref to tag
+          if [ -z "$head" ] && [ "${{ github.event_name }}" = "release" ]; then
+            head="${{ github.event.release.tag_name }}"
+          fi
+          echo "base_ref=$base" >> $GITHUB_OUTPUT
+          echo "head_ref=$head" >> $GITHUB_OUTPUT
+
+      - name: Detect changed files
+        id: changes
+        uses: tj-actions/changed-files@v45
+        with:
+          base_ref: ${{ steps.refs.outputs.base_ref }}
+          ref: ${{ steps.refs.outputs.head_ref }}
+          files: ${{ inputs.watched_files }}
+
+      - name: Debug output
+        if: always()
+        run: |
+          echo "files_changed: ${{ steps.changes.outputs.any_changed }}"
+          echo "changed_files_list: ${{ steps.changes.outputs.all_changed_files }}"
