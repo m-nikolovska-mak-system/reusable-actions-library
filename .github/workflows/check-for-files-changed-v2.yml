@@ -28,31 +28,35 @@ on:
 jobs:
   check-changes:
     runs-on: ubuntu-latest
-    outputs:
-      files_changed: ${{ steps.check.outputs.files_changed }}
-      changed_files_list: ${{ steps.check.outputs.changed_files_list }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout calling repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Need full history to compare tags
+          fetch-depth: 0
+
+      - name: Checkout reusable workflow repo
+        uses: actions/checkout@v4
+        with:
+          repository: m-nikolovska-mak-system/github-reusable-workflows  # your reusable repo
+          path: reusable
+          ref: main  # or whichever branch you’re testing
 
       - name: Make helper scripts executable
         run: |
-          chmod +x .github/scripts/*.sh
+          chmod +x reusable/.github/scripts/*.sh
 
-      - name: Determine tags to compare
+      - name: Run tag detection
         id: tags
         run: |
-          bash .github/actions/scripts/detect-tags.sh \
+          bash reusable/.github/scripts/detect-tags.sh \
             "${{ inputs.current_tag }}" \
             "${{ inputs.previous_tag }}"
 
       - name: Check for file changes
         id: check
         run: |
-          bash .github/actions/scripts/check-changes.sh \
+          bash reusable/.github/scripts/check-changes.sh \
             "${{ steps.tags.outputs.prev_tag }}" \
             "${{ steps.tags.outputs.current_tag }}" \
             "${{ inputs.watched_files }}"
