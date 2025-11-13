@@ -40,7 +40,7 @@ jobs:
 
       - name: Make helper scripts executable
         run: |
-          chmod +x .github/actions/scripts/*.sh
+          chmod +x .github/scripts/*.sh
 
       - name: Determine tags to compare
         id: tags
