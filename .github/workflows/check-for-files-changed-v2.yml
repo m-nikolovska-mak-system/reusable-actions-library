@@ -28,6 +28,9 @@ on:
 jobs:
   check-changes:
     runs-on: ubuntu-latest
+    outputs:
+      files_changed: ${{ steps.result.outputs.files_changed }}
+      changed_files_list: ${{ steps.result.outputs.changed_files_list }}
 
     steps:
       - name: Checkout calling repository
