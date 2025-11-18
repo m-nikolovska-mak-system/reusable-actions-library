@@ -33,9 +33,8 @@ on:
 jobs:
   notify-teams:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Send Microsoft Teams notification
+      - name: Send Teams Notification
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.teams_webhook_url }}
           NOTIFICATION_TITLE: ${{ inputs.notification_title }}
@@ -50,11 +49,11 @@ jobs:
             exit 1
           fi
 
-          REPO="${{ github.repository }}"
-          SHA="${{ github.sha }}"
+          # Assign GitHub context safely to shell variables
+          REPO="${GITHUB_REPOSITORY}"
+          SHA="${GITHUB_SHA}"
+          SHORT_SHA="${SHA:0:7}"
           TIMESTAMP=$(TZ='Europe/Belgrade' date +"%Y-%m-%d %H:%M %Z")
-
-# DO NOT INDENT HEREDOC!
 cat > payload.json <<EOF
 {
   "type": "message",
@@ -68,22 +67,22 @@ cat > payload.json <<EOF
         "body": [
           {
             "type": "TextBlock",
-            "text": "${NOTIFICATION_TITLE}",
+            "text": "$NOTIFICATION_TITLE",
             "weight": "Bolder",
-            "color": "${CARD_COLOR}"
+            "color": "$CARD_COLOR"
           },
           {
             "type": "TextBlock",
-            "text": "${ACTION_MESSAGE}",
+            "text": "$ACTION_MESSAGE",
             "wrap": true
           },
           {
             "type": "TextBlock",
-            "text": "🔗 Commit: https://github.com/${REPO}/commit/${SHA}"
+            "text": "🔗 Commit: https://github.com/$REPO/commit/$SHA"
           },
           {
             "type": "TextBlock",
-            "text": "🕒 Timestamp: ${TIMESTAMP}"
+            "text": "🕒 Timestamp: $TIMESTAMP"
           },
           {
             "type": "TextBlock",
@@ -92,7 +91,7 @@ cat > payload.json <<EOF
           },
           {
             "type": "TextBlock",
-            "text": "${FILES}",
+            "text": "$FILES",
             "fontType": "Monospace",
             "wrap": true
           }
@@ -104,7 +103,6 @@ cat > payload.json <<EOF
 EOF
 
           echo "📤 Sending notification to Teams..."
-
           http_code=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Content-Type: application/json" \
             -d @payload.json \
