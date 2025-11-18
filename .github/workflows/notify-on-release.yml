@@ -36,7 +36,9 @@ jobs:
       
       - name: Detect file changes
         id: changes
-        uses: my-company/composite-actions/detect-file-changes@v1
+        uses: m-nikolovska-mak-system/reusable-workflows/actions/detect-file-changes@v1
+        # OR if using separate repos:
+        # uses: my-company/composite-actions/detect-file-changes@v1
         with:
           base-ref: ${{ inputs.base-tag }}
           head-ref: HEAD
@@ -70,7 +72,9 @@ jobs:
       
       - name: Send Teams notification
         if: steps.changes.outputs.changes-detected == 'true'
-        uses: my-company/composite-actions/send-teams-notification@v1
+        uses: m-nikolovska-mak-system/reusable-workflows/actions/send-teams-notification@v1
+        # OR if using separate repos:
+        # uses: my-company/composite-actions/send-teams-notification@v1
         with:
           webhook-url: ${{ inputs.teams-webhook-url || secrets.TEAMS_WEBHOOK_URL }}
           title: ${{ inputs.notification-title }}
