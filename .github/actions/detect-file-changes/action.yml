@@ -1,0 +1,91 @@
+name: Detect File Changes
+description: Detects if specific files or patterns changed between two commits
+
+inputs:
+  base-ref:
+    description: 'Base git reference (e.g., previous tag, main branch)'
+    required: true
+  head-ref:
+    description: 'Head git reference (e.g., current tag, HEAD)'
+    required: false
+    default: 'HEAD'
+  file-patterns:
+    description: 'Newline-separated list of file patterns to check (supports globs)'
+    required: true
+    default: ''
+
+outputs:
+  changes-detected:
+    description: 'true if any matching files changed, false otherwise'
+    value: ${{ steps.check.outputs.changes-detected }}
+  changed-files:
+    description: 'JSON array of changed files that matched patterns'
+    value: ${{ steps.check.outputs.changed-files }}
+  changed-files-list:
+    description: 'Newline-separated list of changed files'
+    value: ${{ steps.check.outputs.changed-files-list }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Fetch git history
+      shell: bash
+      run: |
+        git fetch --depth=100 origin ${{ inputs.base-ref }}
+    
+    - name: Check for changes
+      id: check
+      shell: bash
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
+        HEAD_REF: ${{ inputs.head-ref }}
+        PATTERNS: ${{ inputs.file-patterns }}
+      run: |
+        echo "Checking for changes between $BASE_REF and $HEAD_REF"
+        
+        # Get all changed files
+        ALL_CHANGED=$(git diff --name-only "$BASE_REF" "$HEAD_REF" || echo "")
+        
+        if [ -z "$ALL_CHANGED" ]; then
+          echo "No changes detected"
+          echo "changes-detected=false" >> $GITHUB_OUTPUT
+          echo "changed-files=[]" >> $GITHUB_OUTPUT
+          echo "changed-files-list=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Filter by patterns
+        MATCHING_FILES=""
+        while IFS= read -r pattern; do
+          [ -z "$pattern" ] && continue
+          
+          echo "Checking pattern: $pattern"
+          MATCHES=$(echo "$ALL_CHANGED" | grep -E "$pattern" || echo "")
+          
+          if [ -n "$MATCHES" ]; then
+            MATCHING_FILES="$MATCHING_FILES
+$MATCHES"
+          fi
+        done <<< "$PATTERNS"
+        
+        # Remove duplicates and empty lines
+        MATCHING_FILES=$(echo "$MATCHING_FILES" | sort -u | sed '/^$/d')
+        
+        if [ -n "$MATCHING_FILES" ]; then
+          echo "✅ Changes detected in monitored files:"
+          echo "$MATCHING_FILES"
+          
+          # Convert to JSON array
+          FILES_JSON=$(echo "$MATCHING_FILES" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          
+          echo "changes-detected=true" >> $GITHUB_OUTPUT
+          echo "changed-files=$FILES_JSON" >> $GITHUB_OUTPUT
+          echo "changed-files-list<<EOF" >> $GITHUB_OUTPUT
+          echo "$MATCHING_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        else
+          echo "No changes in monitored files"
+          echo "changes-detected=false" >> $GITHUB_OUTPUT
+          echo "changed-files=[]" >> $GITHUB_OUTPUT
+          echo "changed-files-list=" >> $GITHUB_OUTPUT
+        fi
