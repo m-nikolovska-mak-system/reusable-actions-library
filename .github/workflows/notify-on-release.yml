@@ -1,0 +1,81 @@
+name: Notify on Release Changes
+
+on:
+  workflow_call:
+    inputs:
+      base-tag:
+        description: 'Base tag to compare against (e.g., previous release)'
+        required: true
+        type: string
+      file-patterns:
+        description: 'Newline-separated file patterns to monitor'
+        required: true
+        type: string
+      notification-title:
+        description: 'Title for Teams notification'
+        required: false
+        type: string
+        default: '🚀 Release Contains Important Changes'
+      teams-webhook-url:
+        description: 'Teams webhook URL (or pass via secret)'
+        required: false
+        type: string
+    secrets:
+      TEAMS_WEBHOOK_URL:
+        description: 'Teams webhook URL (alternative to input)'
+        required: false
+
+jobs:
+  detect-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for comparison
+      
+      - name: Detect file changes
+        id: changes
+        uses: my-company/composite-actions/detect-file-changes@v1
+        with:
+          base-ref: ${{ inputs.base-tag }}
+          head-ref: HEAD
+          file-patterns: ${{ inputs.file-patterns }}
+      
+      - name: Prepare notification data
+        if: steps.changes.outputs.changes-detected == 'true'
+        id: prepare
+        shell: bash
+        env:
+          CHANGED_FILES: ${{ steps.changes.outputs.changed-files-list }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # Build facts JSON
+          FACTS=$(jq -n \
+            --arg repo "${{ github.repository }}" \
+            --arg release "${{ github.ref_name }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg url "$RUN_URL" \
+            --arg files "$CHANGED_FILES" \
+            '[
+              {"name": "Repository", "value": $repo},
+              {"name": "Release", "value": $release},
+              {"name": "Triggered by", "value": $actor},
+              {"name": "Changed Files", "value": $files},
+              {"name": "Workflow Run", "value": $url}
+            ]')
+          
+          echo "facts=$FACTS" >> $GITHUB_OUTPUT
+      
+      - name: Send Teams notification
+        if: steps.changes.outputs.changes-detected == 'true'
+        uses: my-company/composite-actions/send-teams-notification@v1
+        with:
+          webhook-url: ${{ inputs.teams-webhook-url || secrets.TEAMS_WEBHOOK_URL }}
+          title: ${{ inputs.notification-title }}
+          message: |
+            A new release contains changes to monitored files.
+            Please review the changes and take necessary actions.
+          color: warning
+          facts: ${{ steps.prepare.outputs.facts }}
