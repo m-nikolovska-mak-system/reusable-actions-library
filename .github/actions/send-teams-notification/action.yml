@@ -1,0 +1,67 @@
+name: Send Teams Notification
+description: Sends a notification to Microsoft Teams webhook
+
+inputs:
+  webhook-url:
+    description: 'Teams webhook URL'
+    required: true
+  title:
+    description: 'Notification title'
+    required: true
+  message:
+    description: 'Notification message'
+    required: true
+  color:
+    description: 'Message color (good, warning, danger)'
+    required: false
+    default: 'good'
+  facts:
+    description: 'JSON array of facts to display'
+    required: false
+    default: '[]'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send Teams notification
+      shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+        TITLE: ${{ inputs.title }}
+        MESSAGE: ${{ inputs.message }}
+        COLOR: ${{ inputs.color }}
+        FACTS: ${{ inputs.facts }}
+      run: |
+        # Map color to theme color
+        case "$COLOR" in
+          good) THEME_COLOR="28a745" ;;
+          warning) THEME_COLOR="ffc107" ;;
+          danger) THEME_COLOR="dc3545" ;;
+          *) THEME_COLOR="0078d4" ;;
+        esac
+        
+        # Build facts section
+        FACTS_JSON=$(echo "$FACTS" | jq -c 'map({"name": .name, "value": .value})')
+        
+        # Create payload
+        PAYLOAD=$(jq -n \
+          --arg title "$TITLE" \
+          --arg text "$MESSAGE" \
+          --arg color "$THEME_COLOR" \
+          --argjson facts "$FACTS_JSON" \
+          '{
+            "@type": "MessageCard",
+            "@context": "https://schema.org/extensions",
+            "summary": $title,
+            "themeColor": $color,
+            "title": $title,
+            "text": $text,
+            "sections": [{"facts": $facts}]
+          }')
+        
+        # Send to Teams
+        curl -X POST "$WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d "$PAYLOAD"
+        
+        echo "✅ Teams notification sent successfully"
