@@ -1,0 +1,36 @@
+name: "Teams Notify"
+description: "Send customizable Teams messages via webhook"
+inputs:
+  title:
+    required: true
+  message:
+    required: true
+  color:
+    required: false
+    default: Accent
+  webhook:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send Teams Notification
+      shell: bash
+      run: |
+        PAYLOAD=$(cat <<EOF
+        {
+          "themeColor": "${{ inputs.color }}",
+          "title": "${{ inputs.title }}",
+          "text": "${{ inputs.message }}"
+        }
+        EOF
+        )
+
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          -H "Content-Type: application/json" \
+          -d "$PAYLOAD" "${{ inputs.webhook }}")
+
+        if [ "$STATUS" != "200" ] && [ "$STATUS" != "202" ]; then
+          echo "Teams webhook failed: $STATUS"
+          exit 1
+        fi
