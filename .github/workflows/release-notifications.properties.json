@@ -1,0 +1,10 @@
+{
+  "name": "Release Notifications for Teams",
+  "description": "Automatically notify Teams when releases contain changes to critical files",
+  "iconName": "rocket",
+  "categories": ["Deployment", "Notifications"],
+  "filePatterns": [
+    ".*\\.java$",
+    "package\\.json$"
+  ]
+}
