@@ -8,28 +8,32 @@ on:
         required: false
         type: string
         default: '🚀 Files Updated'
+
       action_required_message:
         description: 'Custom action message'
         required: false
         type: string
-        default: '⚠️ **Action Required:** Please review changes'
+        default: '⚠️ Please review changes'
+
       card_color:
         description: 'Accent color theme (Accent, Good, Warning, Attention)'
         required: false
         type: string
         default: 'Accent'
+
       files:
         description: 'List of changed files'
         required: false
         type: string
+
     secrets:
       teams_webhook_url:
-        description: 'Microsoft Teams Incoming Webhook URL'
         required: true
 
 jobs:
   notify-teams:
     runs-on: ubuntu-latest
+
     steps:
       - name: Send Microsoft Teams notification
         env:
@@ -40,86 +44,76 @@ jobs:
           FILES: ${{ inputs.files }}
         run: |
           set -e
-        
+
           if [ -z "$TEAMS_WEBHOOK_URL" ]; then
             echo "❌ Missing teams_webhook_url secret."
             exit 1
           fi
-        
-          ACTOR="${{ github.actor }}"
+
           REPO="${{ github.repository }}"
           SHA="${{ github.sha }}"
-          SHORT_SHA="${SHA:0:7}"
           TIMESTAMP=$(TZ='Europe/Belgrade' date +"%Y-%m-%d %H:%M %Z")
-        
-          PAYLOAD=$(cat <<EOF
+
+# DO NOT INDENT HEREDOC!
+cat > payload.json <<EOF
+{
+  "type": "message",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "content": {
+        "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
           {
-          "type": "message",
-          "attachments": [
-            {
-              "contentType": "application/vnd.microsoft.card.adaptive",
-              "content": {
-                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                "type": "AdaptiveCard",
-                "version": "1.4",
-                "body": [
-                  {
-                    "type": "TextBlock",
-                    "text": "${NOTIFICATION_TITLE}",
-                    "weight": "Bolder",
-                    "color": "${CARD_COLOR}"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "${ACTION_MESSAGE}",
-                    "wrap": true
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "🔗 Commit: https://github.com/${REPO}/commit/${SHA}"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "🕒 Timestamp: ${TIMESTAMP}"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "📂 Files Changed:",
-                    "weight": "Bolder"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "${FILES}",
-                    "fontType": "Monospace",
-                    "wrap": true
-                  }
-                ]
-              }
-            }
-          ]
+            "type": "TextBlock",
+            "text": "${NOTIFICATION_TITLE}",
+            "weight": "Bolder",
+            "color": "${CARD_COLOR}"
+          },
+          {
+            "type": "TextBlock",
+            "text": "${ACTION_MESSAGE}",
+            "wrap": true
+          },
+          {
+            "type": "TextBlock",
+            "text": "🔗 Commit: https://github.com/${REPO}/commit/${SHA}"
+          },
+          {
+            "type": "TextBlock",
+            "text": "🕒 Timestamp: ${TIMESTAMP}"
+          },
+          {
+            "type": "TextBlock",
+            "text": "📂 Files Changed:",
+            "weight": "Bolder"
+          },
+          {
+            "type": "TextBlock",
+            "text": "${FILES}",
+            "fontType": "Monospace",
+            "wrap": true
           }
-          EOF
-          )
-
-
-          # Substitute variables in the payload
-          PAYLOAD=$(echo "$PAYLOAD" | \
-            sed "s|\$NOTIFICATION_TITLE|$NOTIFICATION_TITLE|g" | \
-            sed "s|\$ACTION_MESSAGE|$ACTION_MESSAGE|g" | \
-            sed "s|\$CARD_COLOR|$CARD_COLOR|g" | \
-            sed "s|\$REPO|$REPO|g" | \
-            sed "s|\$SHA|$SHA|g" | \
-            sed "s|\$TIMESTAMP|$TIMESTAMP|g" | \
-            sed "s|\$FILES|$FILES|g")
+        ]
+      }
+    }
+  ]
+}
+EOF
 
           echo "📤 Sending notification to Teams..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD" "$TEAMS_WEBHOOK_URL")
 
-          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "202" ]; then
-            echo "✅ Teams notification sent successfully!"
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d @payload.json \
+            "$TEAMS_WEBHOOK_URL")
+
+          if [ "$http_code" = "200" ] || [ "$http_code" = "202" ]; then
+            echo "✅ Teams notification sent!"
           else
-            echo "❌ Error: Teams webhook failed with status $HTTP_CODE"
-            echo "$PAYLOAD"
+            echo "❌ Teams webhook failed with status $http_code"
+            cat payload.json
             exit 1
+          fi
