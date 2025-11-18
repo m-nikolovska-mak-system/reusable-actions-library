@@ -40,66 +40,67 @@ jobs:
           FILES: ${{ inputs.files }}
         run: |
           set -e
-
+        
           if [ -z "$TEAMS_WEBHOOK_URL" ]; then
             echo "❌ Missing teams_webhook_url secret."
             exit 1
           fi
-
+        
           ACTOR="${{ github.actor }}"
           REPO="${{ github.repository }}"
           SHA="${{ github.sha }}"
           SHORT_SHA="${SHA:0:7}"
           TIMESTAMP=$(TZ='Europe/Belgrade' date +"%Y-%m-%d %H:%M %Z")
-
-          PAYLOAD=$(cat <<'EOF'
+        
+          PAYLOAD=$(cat <<EOF
           {
-            "type": "message",
-            "attachments": [
-              {
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                  "type": "AdaptiveCard",
-                  "version": "1.4",
-                  "body": [
-                    {
-                      "type": "TextBlock",
-                      "text": "$NOTIFICATION_TITLE",
-                      "weight": "Bolder",
-                     CARD_COLOR"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "$ACTION_MESSAGE",
-                      "wrap": true
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "🔗 Commit: https://github.com/$REPO/commit/$SHA"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "🕒 Timestamp: $TIMESTAMP"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "📂 Files Changed:",
-                      "weight": "Bolder"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "$FILES",
-                      "fontType": "Monospace",
-                      "wrap": true
-                    }
-                  ]
-                }
+          "type": "message",
+          "attachments": [
+            {
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
+                  {
+                    "type": "TextBlock",
+                    "text": "${NOTIFICATION_TITLE}",
+                    "weight": "Bolder",
+                    "color": "${CARD_COLOR}"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "${ACTION_MESSAGE}",
+                    "wrap": true
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "🔗 Commit: https://github.com/${REPO}/commit/${SHA}"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "🕒 Timestamp: ${TIMESTAMP}"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "📂 Files Changed:",
+                    "weight": "Bolder"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "${FILES}",
+                    "fontType": "Monospace",
+                    "wrap": true
+                  }
+                ]
               }
-            ]
+            }
+          ]
           }
           EOF
           )
+
 
           # Substitute variables in the payload
           PAYLOAD=$(echo "$PAYLOAD" | \
