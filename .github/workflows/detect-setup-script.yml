@@ -1,0 +1,69 @@
+name: Detect Setup Script
+
+on:
+  workflow_call:
+    inputs:
+      pattern:
+        description: "Glob pattern for setup scripts (default: '**/*.iss')"
+        required: false
+        type: string
+        default: "**/*.iss"
+
+      fail_if_missing:
+        description: "Fail the workflow if no setup script is found"
+        required: false
+        type: boolean
+        default: true
+
+    outputs:
+      setup_script:
+        description: "Detected setup script (first match)"
+        value: ${{ jobs.detect.outputs.setup_script }}
+
+      all_scripts:
+        description: "All matching scripts, comma-separated"
+        value: ${{ jobs.detect.outputs.all_scripts }}
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      setup_script: ${{ steps.detect.outputs.setup_script }}
+      all_scripts: ${{ steps.detect.outputs.all_scripts }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect setup script(s)
+        id: detect
+        shell: bash
+        run: |
+          echo "🔍 Searching for setup scripts using pattern: '${{ inputs.pattern }}'"
+
+          # Capture all matching files
+          matches=$(find . -type f -path "${{ inputs.pattern }}" | sort)
+
+          if [ -z "$matches" ]; then
+            echo "⚠️ No setup scripts found!"
+            echo "setup_script=" >> $GITHUB_OUTPUT
+            echo "all_scripts=" >> $GITHUB_OUTPUT
+
+            if [ "${{ inputs.fail_if_missing }}" = "true" ]; then
+              echo "❌ fail_if_missing is true → failing."
+              exit 1
+            else
+              echo "🟡 Continuing without failing."
+              exit 0
+            fi
+          fi
+
+          # First match
+          first=$(echo "$matches" | head -n 1)
+          csv=$(echo "$matches" | paste -sd "," -)
+
+          echo "Found scripts:"
+          echo "$matches"
+
+          echo "setup_script=$first" >> $GITHUB_OUTPUT
+          echo "all_scripts=$csv" >> $GITHUB_OUTPUT
