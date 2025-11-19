@@ -1,0 +1,60 @@
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        description: "Git tag for the release"
+        required: true
+        type: string
+
+      artifact_name:
+        description: "Name of the artifact to download"
+        required: true
+        type: string
+
+      file_pattern:
+        description: "Glob pattern of files to upload"
+        required: false
+        type: string
+        default: "*.exe"
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ./release-assets
+
+      - name: Validate artifact directory
+        run: |
+          if [ ! -d "./release-assets" ]; then
+            echo "❌ release-assets directory missing (download failed)"
+            exit 1
+          fi
+          echo "✓ release-assets directory exists"
+
+      - name: List downloaded files
+        run: |
+          echo "=== Contents of release-assets ==="
+          ls -lah ./release-assets || true
+
+      - name: Validate file presence
+        run: |
+          files=$(ls ./release-assets/${{ inputs.file_pattern }} 2>/dev/null)
+          if [ -z "$files" ]; then
+            echo "❌ No files matching pattern: ${{ inputs.file_pattern }}"
+            exit 1
+          fi
+          echo "✓ Found files:"
+          echo "$files"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          files: ./release-assets/${{ inputs.file_pattern }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
