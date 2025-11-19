@@ -1,142 +1,281 @@
-name: Build Installer
+name: Build Windows Installer with Inno Setup
+# Enterprise reusable workflow for building Windows installers using Inno Setup
+
 on:
   workflow_call:
     inputs:
       jar_cache_key:
+        description: 'Cache key to restore the JAR file'
         required: true
         type: string
-      release_tag:
+      
+      jar_path:
+        description: 'Path where JAR will be restored (matches build output)'
         required: false
         type: string
-        default: "main"
+        default: 'build/libs/*.jar'
+      
+      release_tag:
+        description: 'Git tag/ref to checkout'
+        required: false
+        type: string
+        default: 'main'
+      
       setup_script:
+        description: 'Path to Inno Setup .iss script file'
         required: true
         type: string
+      
       app_name:
+        description: 'Application name for the installer'
         required: true
         type: string
+      
       app_version:
+        description: 'Application version (e.g., v1.0.0 or 1.0.0)'
         required: true
         type: string
+      
       output_name:
+        description: 'Base name for output installer (without .exe)'
         required: true
         type: string
+      
+      installer_icon:
+        description: 'Path to .ico file for installer (optional)'
+        required: false
+        type: string
+        default: ''
+      
+      inno_setup_version:
+        description: 'Inno Setup version to install'
+        required: false
+        type: string
+        default: '6'
+    
+    outputs:
+      installer_artifact_name:
+        description: 'Name of the uploaded artifact containing the installer'
+        value: ${{ jobs.build-installer.outputs.artifact_name }}
+      
+      installer_filename:
+        description: 'Name of the built installer .exe file'
+        value: ${{ jobs.build-installer.outputs.installer_filename }}
 
 jobs:
   build-installer:
     runs-on: windows-latest
-    env:
-      APP_NAME: ${{ inputs.app_name }}
-      APP_VERSION: ${{ inputs.app_version }}
-      OUTPUT_NAME: ${{ inputs.output_name }}
+    name: Build Windows Installer
+    outputs:
+      artifact_name: 'windows-installer'
+      installer_filename: ${{ steps.build-info.outputs.installer_filename }}
+    
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_tag }}
-          
+      
       - name: Restore cached JAR
-        uses: actions/cache/restore@v3
+        uses: actions/cache/restore@v4
         with:
-          path: build/libs/*.jar
+          path: ${{ inputs.jar_path }}
           key: ${{ inputs.jar_cache_key }}
-          
-      - name: Check JAR presence
+          fail-on-cache-miss: true
+      
+      - name: Verify JAR was restored
         run: |
-          if (!(Test-Path "build\libs\*.jar")) {
-            Write-Error "JAR file not found after cache restore."
+          Write-Host "🔍 Verifying JAR file..."
+          
+          $jarFiles = Get-ChildItem -Path "build\libs" -Filter "*.jar" -ErrorAction SilentlyContinue
+          
+          if ($jarFiles.Count -eq 0) {
+            Write-Error "❌ No JAR files found after cache restore!"
+            Write-Host "`nExpected location: build\libs\*.jar"
+            Write-Host "Cache key used: ${{ inputs.jar_cache_key }}"
             exit 1
           }
           
+          $jar = $jarFiles[0]
+          Write-Host "✅ Found JAR: $($jar.Name)"
+          Write-Host "   Size: $([math]::Round($jar.Length / 1MB, 2)) MB"
+          Write-Host "   Path: $($jar.FullName)"
+      
       - name: Get JAR filename
         id: jar-name
         run: |
-          $jar = Get-ChildItem "build\libs" -Filter *.jar -ErrorAction Stop | Select-Object -First 1
-          if (!$jar) {
-            Write-Error "No JAR file found!"
-            exit 1
-          }
-          echo "jar_file=$($jar.Name)" >> $env:GITHUB_OUTPUT
-          echo "Found JAR: $($jar.Name)"
+          $jar = Get-ChildItem "build\libs" -Filter *.jar | Select-Object -First 1
+          $jarName = $jar.Name
+          echo "jar_file=$jarName" >> $env:GITHUB_OUTPUT
+          Write-Host "📦 JAR filename: $jarName"
       
-         
-      - name: Install Inno Setup
-        run: choco install innosetup --no-progress -y
-        
-      - name: Validate Inno Setup install
+      - name: Verify Inno Setup script exists
         run: |
-          if (!(Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
-            Write-Error "Inno Setup not installed correctly."
+          $scriptPath = "${{ inputs.setup_script }}"
+          Write-Host "🔍 Looking for Inno Setup script: $scriptPath"
+          
+          if (!(Test-Path $scriptPath)) {
+            Write-Error "❌ Setup script not found: $scriptPath"
+            Write-Host "`nAvailable .iss files:"
+            Get-ChildItem -Filter "*.iss" -Recurse | Select-Object FullName
             exit 1
           }
-                
-      - name: Build setup.exe with Inno Setup
+          
+          Write-Host "✅ Found setup script: $scriptPath"
+      
+      - name: Install Inno Setup ${{ inputs.inno_setup_version }}
+        run: |
+          Write-Host "📥 Installing Inno Setup..."
+          choco install innosetup --version=${{ inputs.inno_setup_version }} --no-progress -y
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ Failed to install Inno Setup"
+            exit 1
+          }
+          
+          Write-Host "✅ Inno Setup installed"
+      
+      - name: Validate Inno Setup installation
+        run: |
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          
+          if (!(Test-Path $isccPath)) {
+            Write-Error "❌ Inno Setup compiler not found at: $isccPath"
+            
+            Write-Host "`nSearching for ISCC.exe..."
+            Get-ChildItem -Path "C:\Program Files (x86)" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+            exit 1
+          }
+          
+          Write-Host "✅ ISCC found at: $isccPath"
+          
+          # Add to PATH for easier access
+          $env:PATH += ";C:\Program Files (x86)\Inno Setup 6"
+          echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
+      
+      - name: Prepare build environment
+        run: |
+          Write-Host "📂 Preparing output directory..."
+          
+          if (!(Test-Path "output")) {
+            New-Item -ItemType Directory -Path "output" | Out-Null
+            Write-Host "✅ Created output directory"
+          } else {
+            Write-Host "✅ Output directory exists"
+          }
+      
+      - name: Build installer with Inno Setup
+        id: build
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
-      
-          echo "=== Preparing Inno Setup build ==="
-      
-          # Find ISCC dynamically
-          $issCmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-          if ($null -eq $issCmd) {
-              Write-Error "❌ Could not find ISCC.exe on PATH. Inno Setup may not be installed."
-              exit 1
-          }
-          $issPath = $issCmd.Source
-          echo "✅ Found Inno Setup compiler at: $issPath"
-      
-          # Ensure output directory exists
-          if (!(Test-Path "output")) { New-Item -ItemType Directory -Path "output" | Out-Null }
-      
-          # Log parameters
-          echo "Building with parameters:"
-          echo "  AppName:     ${{ inputs.app_name }}"
-          echo "  AppVersion:  ${{ inputs.app_version }}"
-          echo "  JarFileName: ${{ steps.jar-name.outputs.jar_file }}"
-          echo "  OutputName:  ${{ inputs.output_name }}"
-          echo "  Script:      ${{ inputs.setup_script }}"
-      
-          # Run ISCC
-          & $issPath `
-            /DAppName=${{ inputs.app_name }} `
-            /DAppVersion=${{ inputs.app_version }} `
-            /DJarFileName=${{ steps.jar-name.outputs.jar_file }} `
-            /DOutputBaseName=${{ inputs.output_name }} `
-            "${{ inputs.setup_script }}" 2>&1 | Tee-Object -FilePath build-log.txt
-      
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ ISCC failed with exit code $LASTEXITCODE"
+          
+          Write-Host "=========================================="
+          Write-Host "🔨 BUILDING WINDOWS INSTALLER"
+          Write-Host "=========================================="
+          Write-Host ""
+          
+          # Find ISCC
+          $isccCmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          if ($null -eq $isccCmd) {
+            Write-Error "❌ ISCC.exe not found on PATH"
             exit 1
           }
+          $isccPath = $isccCmd.Source
+          Write-Host "✅ Using compiler: $isccPath"
+          Write-Host ""
+          
+          # Build parameters
+          Write-Host "📋 Build Parameters:"
+          Write-Host "   App Name:     ${{ inputs.app_name }}"
+          Write-Host "   App Version:  ${{ inputs.app_version }}"
+          Write-Host "   JAR File:     ${{ steps.jar-name.outputs.jar_file }}"
+          Write-Host "   Output Name:  ${{ inputs.output_name }}"
+          Write-Host "   Script:       ${{ inputs.setup_script }}"
+          Write-Host ""
+          
+          # Prepare compiler arguments
+          $compilerArgs = @(
+            "/DAppName=${{ inputs.app_name }}",
+            "/DAppVersion=${{ inputs.app_version }}",
+            "/DJarFileName=${{ steps.jar-name.outputs.jar_file }}",
+            "/DOutputBaseName=${{ inputs.output_name }}",
+            "${{ inputs.setup_script }}"
+          )
+          
+          # Add icon if provided
+          if ("${{ inputs.installer_icon }}" -ne "") {
+            $compilerArgs += "/DIconFile=${{ inputs.installer_icon }}"
+          }
+          
+          Write-Host "🚀 Running Inno Setup compiler..."
+          Write-Host ""
+          
+          # Run ISCC and capture output
+          & $isccPath $compilerArgs 2>&1 | Tee-Object -FilePath "build-log.txt"
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host ""
+            Write-Host "=========================================="
+            Write-Error "❌ ISCC failed with exit code $LASTEXITCODE"
+            Write-Host "=========================================="
+            Write-Host ""
+            Write-Host "Build log:"
+            Get-Content "build-log.txt"
+            exit 1
+          }
+          
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "✅ BUILD COMPLETED SUCCESSFULLY"
+          Write-Host "=========================================="
       
-          echo "✅ Build completed successfully!"
-
-      - name: Debug - Check what was created
+      - name: Verify installer was created
+        id: build-info
         run: |
-          echo "=== Contents of output directory ==="
-          if (Test-Path "output") {
-            Get-ChildItem output -Force
-          } else {
-            echo "❌ Output directory does not exist!"
+          Write-Host "🔍 Verifying installer output..."
+          Write-Host ""
+          
+          # Check output directory
+          if (!(Test-Path "output")) {
+            Write-Error "❌ Output directory not found!"
+            exit 1
           }
           
-          echo "`n=== All EXE files in workspace ==="
-          Get-ChildItem . -Recurse -Filter *.exe -ErrorAction SilentlyContinue | Select-Object FullName
+          $installers = Get-ChildItem "output" -Filter "*.exe"
           
-          echo "`n=== Current directory ==="
-          Get-Location
-          
-          echo "`n=== Build log (last 50 lines) ==="
-          if (Test-Path "build-log.txt") {
-            Get-Content build-log.txt -Tail 50
+          if ($installers.Count -eq 0) {
+            Write-Error "❌ No .exe files found in output directory!"
+            Write-Host "`nOutput directory contents:"
+            Get-ChildItem "output" -Force
+            exit 1
           }
+          
+          $installer = $installers[0]
+          $installerName = $installer.Name
+          
+          Write-Host "✅ Installer created successfully!"
+          Write-Host "   Name: $installerName"
+          Write-Host "   Size: $([math]::Round($installer.Length / 1MB, 2)) MB"
+          Write-Host "   Path: $($installer.FullName)"
+          
+          # Save output
+          echo "installer_filename=$installerName" >> $env:GITHUB_OUTPUT
       
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: setup-installer
-          path: output/*.exe  
-                
-      - name: Installer Build Complete
-        run: echo "✅ Installer successfully built and uploaded."
+          name: windows-installer
+          path: output/*.exe
+          if-no-files-found: error
+          retention-days: 30
+      
+      - name: Build summary
+        run: |
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### ✅ Windows Installer Built Successfully"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Installer:** ``${{ steps.build-info.outputs.installer_filename }}``"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**App Name:** ${{ inputs.app_name }}"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "**Version:** ${{ inputs.app_version }}"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "✅ Artifact uploaded and ready for release"
