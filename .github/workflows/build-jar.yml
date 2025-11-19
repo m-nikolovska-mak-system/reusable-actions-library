@@ -1,0 +1,142 @@
+name: Build JAR with Gradle
+
+on:
+  workflow_call:
+    inputs:
+      java_version:
+        description: 'Java version to use (e.g., 17, 21)'
+        required: false
+        type: string
+        default: '17'
+      
+      java_distribution:
+        description: 'Java distribution (temurin, zulu, adopt, etc.)'
+        required: false
+        type: string
+        default: 'temurin'
+      
+      gradle_task:
+        description: 'Gradle task to run (e.g., jar, shadowJar, bootJar)'
+        required: false
+        type: string
+        default: 'jar'
+      
+      release_tag:
+        description: 'Git ref/tag to checkout (defaults to main)'
+        required: false
+        type: string
+        default: 'main'
+      
+      jar_output_path:
+        description: 'Path where JAR is built (relative to repo root)'
+        required: false
+        type: string
+        default: 'build/libs/*.jar'
+      
+      additional_gradle_args:
+        description: 'Additional Gradle arguments (e.g., --info, --stacktrace)'
+        required: false
+        type: string
+        default: '--no-daemon'
+    
+    outputs:
+      jar_cache_key:
+        description: 'Cache key to retrieve the built JAR'
+        value: ${{ jobs.build.outputs.jar_cache_key }}
+      
+      jar_filename:
+        description: 'Name of the built JAR file'
+        value: ${{ jobs.build.outputs.jar_filename }}
+      
+      jar_path:
+        description: 'Full path to the JAR file'
+        value: ${{ jobs.build.outputs.jar_path }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build JAR
+    outputs:
+      jar_cache_key: ${{ steps.cache-jar.outputs.cache-primary-key }}
+      jar_filename: ${{ steps.jar-info.outputs.filename }}
+      jar_path: ${{ steps.jar-info.outputs.path }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+      
+      - name: Set up Java ${{ inputs.java_version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.java_distribution }}
+          java-version: ${{ inputs.java_version }}
+      
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+      
+      - name: Setup Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      
+      - name: Build JAR with Gradle
+        run: |
+          echo "🔨 Building JAR with Gradle..."
+          echo "Task: ${{ inputs.gradle_task }}"
+          echo "Args: ${{ inputs.additional_gradle_args }}"
+          echo ""
+          
+          ./gradlew ${{ inputs.gradle_task }} ${{ inputs.additional_gradle_args }}
+          
+          echo "✅ Build completed"
+      
+      - name: Validate JAR was created
+        id: jar-info
+        run: |
+          echo "🔍 Looking for JAR in: ${{ inputs.jar_output_path }}"
+          
+          # Find the JAR file
+          jar_file=$(ls ${{ inputs.jar_output_path }} 2>/dev/null | head -n 1)
+          
+          if [ -z "$jar_file" ]; then
+            echo "❌ ERROR: No JAR file found at ${{ inputs.jar_output_path }}"
+            echo ""
+            echo "Directory contents:"
+            ls -la build/libs/ 2>/dev/null || echo "build/libs/ does not exist"
+            exit 1
+          fi
+          
+          jar_basename=$(basename "$jar_file")
+          
+          echo "✅ Found JAR: $jar_basename"
+          echo "   Size: $(du -h "$jar_file" | cut -f1)"
+          echo ""
+          
+          # Save outputs
+          echo "filename=$jar_basename" >> $GITHUB_OUTPUT
+          echo "path=$jar_file" >> $GITHUB_OUTPUT
+      
+      - name: Cache built JAR for next workflow
+        id: cache-jar
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ inputs.jar_output_path }}
+          key: jar-${{ github.sha }}-${{ github.run_id }}-${{ github.run_number }}
+      
+      - name: Build summary
+        run: |
+          echo "### ✅ JAR Build Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**JAR File:** \`${{ steps.jar-info.outputs.filename }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Java Version:** ${{ inputs.java_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Gradle Task:** \`${{ inputs.gradle_task }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Cache Key:** \`${{ steps.cache-jar.outputs.cache-primary-key }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ JAR is cached and ready for installer build" >> $GITHUB_STEP_SUMMARY
