@@ -22,7 +22,7 @@ Workflow file:
 ## 📥 Inputs
 
 | Input | Required | Description |
-|-------|----------|-------------|-------------------------------------------|
+|-------|----------|-------------|
 | `notification_title` | ❌ | Title displayed on the Teams card |
 | `action_required_message` | ❌ | Main description message |
 | `card_color` | ❌ | Teams color theme (`Accent`, `Good`, `Warning`, `Attention`) |
