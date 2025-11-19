@@ -1,117 +1,269 @@
-name: Reusable Teams Notifier
+name: Microsoft Teams Notifier
 
 on:
   workflow_call:
     inputs:
       notification_title:
-        description: 'Title for the Teams card'
+        description: 'Title for the Teams notification card'
         required: false
         type: string
-        default: '🚀 Files Updated'
-
+        default: '🚀 Workflow Completed'
+      
       action_required_message:
-        description: 'Custom action message'
+        description: 'Custom action message or description'
         required: false
         type: string
-        default: '⚠️ Please review changes'
-
+        default: '⚠️ **Action Required:** Please review changes'
+      
       card_color:
         description: 'Accent color theme (Accent, Good, Warning, Attention)'
         required: false
         type: string
         default: 'Accent'
-
+      
       files:
-        description: 'List of changed files'
+        description: 'List of changed files (newline or comma separated)'
         required: false
         type: string
-
+        default: 'No files specified'
+      
+      include_actor:
+        description: 'Include triggering user in notification'
+        required: false
+        type: boolean
+        default: true
+      
+      custom_timezone:
+        description: 'Timezone for timestamp (e.g., America/New_York, Europe/London)'
+        required: false
+        type: string
+        default: 'UTC'
+    
     secrets:
       teams_webhook_url:
+        description: 'Microsoft Teams incoming webhook URL'
         required: true
 
 jobs:
   notify-teams:
     runs-on: ubuntu-latest
+    name: Send Teams Notification
+    
     steps:
-      - name: Send Teams Notification
+      - name: Validate inputs
+        run: |
+          echo "🔍 Validating workflow inputs..."
+          
+          VALID_COLORS="Accent Good Warning Attention"
+          if ! echo "$VALID_COLORS" | grep -qw "${{ inputs.card_color }}"; then
+            echo "⚠️ Warning: Invalid card_color '${{ inputs.card_color }}'. Using 'Accent'."
+            echo "CARD_COLOR=Accent" >> $GITHUB_ENV
+          else
+            echo "CARD_COLOR=${{ inputs.card_color }}" >> $GITHUB_ENV
+          fi
+          
+          echo "✅ Validation complete"
+      
+      - name: Prepare notification data
+        id: prepare
+        run: |
+          set -e
+          
+          # Extract GitHub context
+          ACTOR="${{ github.actor }}"
+          REPO="${{ github.repository }}"
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          BRANCH="${{ github.ref_name }}"
+          WORKFLOW="${{ github.workflow }}"
+          RUN_ID="${{ github.run_id }}"
+          
+          # Generate timestamp in specified timezone
+          TIMESTAMP=$(TZ='${{ inputs.custom_timezone }}' date +"%Y-%m-%d %H:%M %Z")
+          
+          # Construct workflow run URL
+          RUN_URL="https://github.com/$REPO/actions/runs/$RUN_ID"
+          
+          # Process files list (handle both newline and comma separated)
+          FILES_RAW="${{ inputs.files }}"
+          if [ "$FILES_RAW" = "No files specified" ]; then
+            FILES_FORMATTED="No files specified"
+          else
+            # Convert to bullet list, handling both formats
+            FILES_FORMATTED=$(echo "$FILES_RAW" | tr ',' '\n' | sed 's/^[[:space:]]*/• /' | sed '/^[[:space:]]*$/d')
+          fi
+          
+          # Save to environment (escape for JSON)
+          {
+            echo "ACTOR=$ACTOR"
+            echo "REPO=$REPO"
+            echo "SHA=$SHA"
+            echo "SHORT_SHA=$SHORT_SHA"
+            echo "BRANCH=$BRANCH"
+            echo "WORKFLOW=$WORKFLOW"
+            echo "TIMESTAMP=$TIMESTAMP"
+            echo "RUN_URL=$RUN_URL"
+            echo 'FILES_FORMATTED<<EOF'
+            echo "$FILES_FORMATTED"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+          
+          echo "✅ Notification data prepared"
+      
+      - name: Send Microsoft Teams notification
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.teams_webhook_url }}
           NOTIFICATION_TITLE: ${{ inputs.notification_title }}
           ACTION_MESSAGE: ${{ inputs.action_required_message }}
-          CARD_COLOR: ${{ inputs.card_color }}
-          FILES: ${{ inputs.files }}
+          INCLUDE_ACTOR: ${{ inputs.include_actor }}
         run: |
           set -e
-
+          
+          # Validate webhook URL
           if [ -z "$TEAMS_WEBHOOK_URL" ]; then
-            echo "❌ Missing teams_webhook_url secret."
+            echo "❌ ERROR: teams_webhook_url secret is not set"
             exit 1
           fi
-
-          # Assign GitHub context safely to shell variables
-          REPO="${GITHUB_REPOSITORY}"
-          SHA="${GITHUB_SHA}"
-          SHORT_SHA="${SHA:0:7}"
-          TIMESTAMP=$(TZ='Europe/Belgrade' date +"%Y-%m-%d %H:%M %Z")
-cat > payload.json <<EOF
-{
-  "type": "message",
-  "attachments": [
-    {
-      "contentType": "application/vnd.microsoft.card.adaptive",
-      "content": {
-        "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-        "type": "AdaptiveCard",
-        "version": "1.4",
-        "body": [
-          {
-            "type": "TextBlock",
-            "text": "$NOTIFICATION_TITLE",
-            "weight": "Bolder",
-            "color": "$CARD_COLOR"
-          },
-          {
-            "type": "TextBlock",
-            "text": "$ACTION_MESSAGE",
-            "wrap": true
-          },
-          {
-            "type": "TextBlock",
-            "text": "🔗 Commit: https://github.com/$REPO/commit/$SHA"
-          },
-          {
-            "type": "TextBlock",
-            "text": "🕒 Timestamp: $TIMESTAMP"
-          },
-          {
-            "type": "TextBlock",
-            "text": "📂 Files Changed:",
-            "weight": "Bolder"
-          },
-          {
-            "type": "TextBlock",
-            "text": "$FILES",
-            "fontType": "Monospace",
-            "wrap": true
-          }
-        ]
-      }
-    }
-  ]
-}
-EOF
-
-          echo "📤 Sending notification to Teams..."
-          http_code=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Content-Type: application/json" \
-            -d @payload.json \
-            "$TEAMS_WEBHOOK_URL")
-
-          if [ "$http_code" = "200" ] || [ "$http_code" = "202" ]; then
-            echo "✅ Teams notification sent!"
+          
+          # Conditional actor field
+          if [ "$INCLUDE_ACTOR" = "true" ]; then
+            ACTOR_FIELD=",{\"type\":\"TextBlock\",\"text\":\"👤 Triggered by: $ACTOR\"}"
           else
-            echo "❌ Teams webhook failed with status $http_code"
-            cat payload.json
+            ACTOR_FIELD=""
+          fi
+          
+          # Escape special characters for JSON
+          TITLE_ESCAPED=$(echo "$NOTIFICATION_TITLE" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+          ACTION_ESCAPED=$(echo "$ACTION_MESSAGE" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+          FILES_ESCAPED=$(echo "$FILES_FORMATTED" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+          
+          # Build Adaptive Card payload
+          PAYLOAD=$(cat <<EOF
+          {
+            "type": "message",
+            "attachments": [
+              {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                  "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                  "type": "AdaptiveCard",
+                  "version": "1.4",
+                  "body": [
+                    {
+                      "type": "ColumnSet",
+                      "columns": [
+                        {
+                          "type": "Column",
+                          "width": "auto",
+                          "items": [
+                            {
+                              "type": "Image",
+                              "url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+                              "size": "Small"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "Column",
+                          "width": "stretch",
+                          "items": [
+                            {
+                              "type": "TextBlock",
+                              "text": "$TITLE_ESCAPED",
+                              "weight": "Bolder",
+                              "size": "Large",
+                              "color": "$CARD_COLOR"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "TextBlock",
+                      "text": "$ACTION_ESCAPED",
+                      "wrap": true,
+                      "spacing": "Medium"
+                    },
+                    {
+                      "type": "FactSet",
+                      "facts": [
+                        {
+                          "title": "Repository:",
+                          "value": "$REPO"
+                        },
+                        {
+                          "title": "Branch:",
+                          "value": "$BRANCH"
+                        },
+                        {
+                          "title": "Commit:",
+                          "value": "[$SHORT_SHA](https://github.com/$REPO/commit/$SHA)"
+                        },
+                        {
+                          "title": "Workflow:",
+                          "value": "$WORKFLOW"
+                        },
+                        {
+                          "title": "Timestamp:",
+                          "value": "$TIMESTAMP"
+                        }
+                      ]
+                    }
+                    $ACTOR_FIELD,
+                    {
+                      "type": "TextBlock",
+                      "text": "📂 **Files Changed:**",
+                      "weight": "Bolder",
+                      "spacing": "Medium"
+                    },
+                    {
+                      "type": "TextBlock",
+                      "text": "$FILES_ESCAPED",
+                      "wrap": true,
+                      "spacing": "Small"
+                    }
+                  ],
+                  "actions": [
+                    {
+                      "type": "Action.OpenUrl",
+                      "title": "View Workflow Run",
+                      "url": "$RUN_URL"
+                    },
+                    {
+                      "type": "Action.OpenUrl",
+                      "title": "View Commit",
+                      "url": "https://github.com/$REPO/commit/$SHA"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+          EOF
+          )
+          
+          echo "📤 Sending notification to Microsoft Teams..."
+          
+          # Send to Teams webhook
+          HTTP_CODE=$(curl -s -o /tmp/teams_response.txt -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "$TEAMS_WEBHOOK_URL")
+          
+          # Check response
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "202" ]; then
+            echo "✅ Teams notification sent successfully! (HTTP $HTTP_CODE)"
+            echo "📋 Notification details:"
+            echo "   Title: $NOTIFICATION_TITLE"
+            echo "   Repository: $REPO"
+            echo "   Branch: $BRANCH"
+            echo "   Commit: $SHORT_SHA"
+          else
+            echo "❌ ERROR: Teams webhook failed with HTTP status $HTTP_CODE"
+            echo "Response body:"
+            cat /tmp/teams_response.txt
+            echo ""
+            echo "Payload sent:"
+            echo "$PAYLOAD"
             exit 1
           fi
