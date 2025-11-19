@@ -1,0 +1,205 @@
+name: Check File Changes Between Releases
+# Uses tj-actions/changed-files for reliable file detection
+
+on:
+  workflow_call:
+    inputs:
+      watched_files:
+        description: 'Files to watch (supports glob patterns like src/**/*.java, config/*.xml). Comma or newline separated.'
+        required: true
+        type: string
+      
+      current_tag:
+        description: 'Current release tag (defaults to github.event.release.tag_name)'
+        required: false
+        type: string
+        default: ''
+      
+      previous_tag:
+        description: 'Previous tag to compare against (auto-detected if empty)'
+        required: false
+        type: string
+        default: ''
+      
+      files_separator:
+        description: 'Separator for output file list (comma, newline, or space)'
+        required: false
+        type: string
+        default: ','
+    
+    outputs:
+      files_changed:
+        description: 'true if any watched files changed, false otherwise'
+        value: ${{ jobs.check-changes.outputs.files_changed }}
+      
+      changed_files_list:
+        description: 'List of changed files (separated by files_separator)'
+        value: ${{ jobs.check-changes.outputs.changed_files_list }}
+      
+      all_changed_files:
+        description: 'All files changed in release (not just watched ones)'
+        value: ${{ jobs.check-changes.outputs.all_changed_files }}
+      
+      comparison_info:
+        description: 'Information about what was compared (from_tag -> to_tag)'
+        value: ${{ jobs.check-changes.outputs.comparison_info }}
+
+jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    name: Detect File Changes
+    outputs:
+      files_changed: ${{ steps.check-watched.outputs.any_changed }}
+      changed_files_list: ${{ steps.check-watched.outputs.all_changed_files }}
+      all_changed_files: ${{ steps.all-changes.outputs.all_changed_files }}
+      comparison_info: ${{ steps.tags.outputs.comparison_info }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for tag comparison
+
+      - name: Determine tags to compare
+        id: tags
+        run: |
+          set -e
+          
+          echo "🔍 Determining which tags to compare..."
+          
+          # Get current tag from input or release event
+          CURRENT_TAG="${{ inputs.current_tag }}"
+          if [ -z "$CURRENT_TAG" ]; then
+            CURRENT_TAG="${{ github.event.release.tag_name }}"
+          fi
+          
+          # Fallback to latest tag if still empty
+          if [ -z "$CURRENT_TAG" ]; then
+            echo "⚠️ No current_tag provided, using latest tag..."
+            git fetch --tags --force
+            CURRENT_TAG=$(git tag --sort=-creatordate | head -n1)
+          fi
+          
+          if [ -z "$CURRENT_TAG" ]; then
+            echo "❌ ERROR: No current tag found and no release event detected"
+            echo "Please provide current_tag input or trigger from a release event"
+            exit 1
+          fi
+          
+          echo "✅ Current tag: $CURRENT_TAG"
+          
+          # Verify current tag exists
+          if ! git rev-parse "$CURRENT_TAG" >/dev/null 2>&1; then
+            echo "❌ ERROR: Tag '$CURRENT_TAG' does not exist in repository"
+            echo "Available tags:"
+            git tag | tail -5
+            exit 1
+          fi
+          
+          # Get previous tag
+          PREVIOUS_TAG="${{ inputs.previous_tag }}"
+          
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "🔍 Auto-detecting previous tag..."
+            git fetch --tags --force
+            
+            # Get second most recent tag (excluding current)
+            PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -v "^${CURRENT_TAG}$" | head -n1)
+            
+            if [ -z "$PREVIOUS_TAG" ]; then
+              echo "⚠️ No previous tag found - this is the first release"
+              echo "Comparing against first commit instead"
+              PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
+            else
+              echo "✅ Auto-detected previous tag: $PREVIOUS_TAG"
+            fi
+          else
+            # Verify provided previous tag exists
+            if ! git rev-parse "$PREVIOUS_TAG" >/dev/null 2>&1; then
+              echo "❌ ERROR: Provided previous tag '$PREVIOUS_TAG' does not exist"
+              exit 1
+            fi
+            echo "✅ Using provided previous tag: $PREVIOUS_TAG"
+          fi
+          
+          # Output for next steps
+          echo "current_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+          echo "comparison_info=$PREVIOUS_TAG → $CURRENT_TAG" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "📊 Comparison: $PREVIOUS_TAG → $CURRENT_TAG"
+
+      - name: Get all changed files
+        id: all-changes
+        uses: tj-actions/changed-files@v45
+        with:
+          base_sha: ${{ steps.tags.outputs.previous_tag }}
+          sha: ${{ steps.tags.outputs.current_tag }}
+          separator: ${{ inputs.files_separator }}
+
+      - name: Check watched files
+        id: check-watched
+        uses: tj-actions/changed-files@v45
+        with:
+          base_sha: ${{ steps.tags.outputs.previous_tag }}
+          sha: ${{ steps.tags.outputs.current_tag }}
+          files: ${{ inputs.watched_files }}
+          separator: ${{ inputs.files_separator }}
+
+      - name: Display results
+        run: |
+          echo "=========================================="
+          echo "📋 FILE CHANGE DETECTION RESULTS"
+          echo "=========================================="
+          echo ""
+          echo "🔖 Comparison: ${{ steps.tags.outputs.comparison_info }}"
+          echo ""
+          echo "👀 Watched files/patterns:"
+          echo "${{ inputs.watched_files }}" | tr ',' '\n' | sed 's/^/  • /'
+          echo ""
+          
+          if [ "${{ steps.check-watched.outputs.any_changed }}" = "true" ]; then
+            echo "✅ WATCHED FILES CHANGED"
+            echo ""
+            echo "Changed watched files:"
+            echo "${{ steps.check-watched.outputs.all_changed_files }}" | tr '${{ inputs.files_separator }}' '\n' | sed 's/^/  ✓ /'
+          else
+            echo "❌ NO WATCHED FILES CHANGED"
+          fi
+          
+          echo ""
+          echo "📊 Total files changed in release: ${{ steps.all-changes.outputs.all_changed_files_count }}"
+          
+          if [ "${{ steps.all-changes.outputs.all_changed_files_count }}" != "0" ]; then
+            echo ""
+            echo "All changed files:"
+            echo "${{ steps.all-changes.outputs.all_changed_files }}" | tr '${{ inputs.files_separator }}' '\n' | sed 's/^/  • /' | head -20
+            if [ "${{ steps.all-changes.outputs.all_changed_files_count }}" -gt 20 ]; then
+              echo "  ... and $(( ${{ steps.all-changes.outputs.all_changed_files_count }} - 20 )) more"
+            fi
+          fi
+          
+          echo ""
+          echo "=========================================="
+
+      - name: Summary
+        run: |
+          echo "### 📋 File Change Detection Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Comparison:** \`${{ steps.tags.outputs.comparison_info }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.check-watched.outputs.any_changed }}" = "true" ]; then
+            echo "✅ **Watched files changed:** Yes" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Changed files:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.check-watched.outputs.all_changed_files }}" | tr '${{ inputs.files_separator }}' '\n' >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Watched files changed:** No" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Total changes:** ${{ steps.all-changes.outputs.all_changed_files_count }} files" >> $GITHUB_STEP_SUMMARY
