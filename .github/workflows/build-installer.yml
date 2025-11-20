@@ -138,15 +138,22 @@ jobs:
       
       - name: Install Inno Setup ${{ inputs.inno_setup_version }}
         run: |
-          Write-Host "📥 Installing Inno Setup..."
-          choco install innosetup --version=${{ inputs.inno_setup_version }} --no-progress -y
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ Failed to install Inno Setup"
-            exit 1
-          }
-          
-          Write-Host "✅ Inno Setup installed"
+            Write-Host "📥 Checking Inno Setup installation..."
+            $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        
+            if (Test-Path $isccPath) {
+              Write-Host "✅ Inno Setup already installed at: $isccPath"
+            } else {
+              Write-Host "📥 Installing Inno Setup..."
+              choco install innosetup --version=${{ inputs.inno_setup_version }} --no-progress -y
+        
+              if ($LASTEXITCODE -ne 0) {
+                Write-Error "❌ Failed to install Inno Setup"
+                exit 1
+              }
+        
+              Write-Host "✅ Inno Setup installed"
+            }
       
       - name: Validate Inno Setup installation
         run: |
