@@ -79,10 +79,11 @@ jobs:
       - name: Restore cached JAR
         uses: actions/cache/restore@v4
         with:
-          path: build/libs
-          key: ${{ inputs.jar_cache_key }}
+          path: build/libs        
+          key: ${{ inputs.jar_cache_key }}  
           fail-on-cache-miss: true
           enableCrossOsArchive: true
+
       
       - name: Verify JAR was restored
         run: |
