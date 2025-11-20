@@ -81,7 +81,6 @@ jobs:
         with:
           path: build/libs        
           key: ${{ inputs.jar_cache_key }}  
-          fail-on-cache-miss: true
           enableCrossOsArchive: true
 
       
