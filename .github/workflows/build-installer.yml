@@ -82,6 +82,8 @@ jobs:
           path: ${{ inputs.jar_path }}
           key: ${{ inputs.jar_cache_key }}
           fail-on-cache-miss: true
+          enableCrossOsArchive: true
+
       
       - name: Verify JAR was restored
         run: |
