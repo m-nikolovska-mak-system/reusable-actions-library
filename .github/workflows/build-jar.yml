@@ -42,7 +42,8 @@ on:
     outputs:
       jar_cache_key:
         description: 'Cache key to retrieve the built JAR'
-        value: ${{ jobs.build.outputs.jar_cache_key }}
+        value: ${{ steps.keygen.outputs.key }}
+
       
       jar_filename:
         description: 'Name of the built JAR file'
@@ -122,13 +123,21 @@ jobs:
           # Save outputs
           echo "filename=$jar_basename" >> $GITHUB_OUTPUT
           echo "path=$jar_file" >> $GITHUB_OUTPUT
+
+
+      - name: Generate cache key
+        id: keygen
+        run: |
+          key="jar-${{ github.sha }}"
+          echo "key=$key" >> $GITHUB_OUTPUT
+
       
       - name: Cache built JAR for next workflow
         id: cache-jar
         uses: actions/cache/save@v4
         with:
           path: ${{ inputs.jar_output_path }}
-          key: jar-${{ github.sha }}-${{ github.run_id }}-${{ github.run_number }}
+          key: ${{ steps.keygen.outputs.key }}
       
       - name: Build summary
         run: |
