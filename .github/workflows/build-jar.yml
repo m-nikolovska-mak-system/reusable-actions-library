@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build JAR
     outputs:
-      jar_cache_key: ${{ steps.cache-jar.outputs.key }}
+      jar_cache_key: ${{ steps.keygen.outputs.key }}
       jar_filename: ${{ steps.jar-info.outputs.filename }}
       jar_path: ${{ steps.jar-info.outputs.path }}
     
