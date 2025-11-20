@@ -97,6 +97,14 @@ jobs:
           ./gradlew ${{ inputs.gradle_task }} ${{ inputs.additional_gradle_args }}
           
           echo "✅ Build completed"
+
+
+      - name: Generate cache key
+        id: keygen
+        run: |
+          key="jar-${{ github.sha }}-${{ github.run_number }}"
+          echo "key=$key" >> $GITHUB_OUTPUT
+          echo "Generated key: $key"    
       
       - name: Validate JAR was created
         id: jar-info
@@ -124,13 +132,6 @@ jobs:
           echo "filename=$jar_basename" >> $GITHUB_OUTPUT
           echo "path=$jar_file" >> $GITHUB_OUTPUT
 
-
-      - name: Generate cache key
-        id: keygen
-        run: |
-          key="jar-${{ github.sha }}-${{ github.run_number }}"
-          echo "key=$key" >> $GITHUB_OUTPUT
-          echo "Generated key: $key"
 
       
       - name: Cache the JAR
