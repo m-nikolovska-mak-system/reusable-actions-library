@@ -84,8 +84,8 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          restore-keys: ${{ runner.os }}-gradle-
+
       
       - name: Build JAR with Gradle
         run: |
@@ -128,16 +128,17 @@ jobs:
       - name: Generate cache key
         id: keygen
         run: |
-          key="jar-${{ github.sha }}"
+          key="jar-${{ github.sha }}-${{ github.run_number }}"
           echo "key=$key" >> $GITHUB_OUTPUT
+          echo "Generated key: $key"
 
       
-      - name: Cache built JAR for next workflow
-        id: cache-jar
+      - name: Cache the JAR
         uses: actions/cache/save@v4
         with:
-          path: ${{ inputs.jar_output_path }}
+          path: build/libs/*.jar
           key: ${{ steps.keygen.outputs.key }}
+      
       
       - name: Build summary
         run: |
@@ -146,6 +147,6 @@ jobs:
           echo "**JAR File:** \`${{ steps.jar-info.outputs.filename }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Java Version:** ${{ inputs.java_version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Gradle Task:** \`${{ inputs.gradle_task }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Cache Key:** \`${{ steps.cache-jar.outputs.cache-primary-key }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Cache Key:** \`${{ steps.keygen.outputs.key }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ JAR is cached and ready for installer build" >> $GITHUB_STEP_SUMMARY
