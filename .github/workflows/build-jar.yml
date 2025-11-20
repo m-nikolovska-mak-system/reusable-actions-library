@@ -42,7 +42,7 @@ on:
     outputs:
       jar_cache_key:
         description: 'Cache key to retrieve the built JAR'
-        value: ${{ steps.keygen.outputs.key }}
+        value: ${{ jobs.build.outputs.jar_cache_key }}
 
       
       jar_filename:
