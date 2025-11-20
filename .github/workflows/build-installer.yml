@@ -102,6 +102,13 @@ jobs:
           Write-Host "✅ Found JAR: $($jar.Name)"
           Write-Host "   Size: $([math]::Round($jar.Length / 1MB, 2)) MB"
           Write-Host "   Path: $($jar.FullName)"
+
+      - name: Ensure JAR cache key exists
+        if: ${{ needs.build-jar.outputs.jar_cache_key == '' }}
+        run: |
+            echo "::error::JAR cache key is EMPTY!"
+            exit 1
+
       
       - name: Get JAR filename
         id: jar-name
