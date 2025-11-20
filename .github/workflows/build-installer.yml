@@ -103,11 +103,16 @@ jobs:
           Write-Host "   Path: $($jar.FullName)"
 
       - name: Ensure JAR cache key exists
-        if: ${{ needs.build-jar.outputs.jar_cache_key == '' }}
+        if: ${{ inputs.jar_cache_key == '' }}
         run: |
             echo "::error::JAR cache key is EMPTY!"
             exit 1
 
+      - name: Debug Inputs
+        run: |
+          echo "jar_cache_key: ${{ inputs.jar_cache_key }}"
+          echo "jar_path: ${{ inputs.jar_path }}"
+          echo "setup_script: ${{ inputs.setup_script }}"
       
       - name: Get JAR filename
         id: jar-name
