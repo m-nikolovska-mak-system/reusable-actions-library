@@ -102,9 +102,14 @@ jobs:
       - name: Generate cache key
         id: keygen
         run: |
-          key="jar-${{ github.sha }}-${{ github.run_number }}"
+          jar_file=$(ls ${{ inputs.jar_output_path }} 2>/dev/null | head -n 1)
+          if [ -z "$jar_file" ]; then
+            echo "❌ ERROR: No JAR file found at ${{ inputs.jar_output_path }}"
+            exit 1
+          fi
+          key="jar-$(sha256sum "$jar_file" | awk '{print $1}')"
           echo "key=$key" >> $GITHUB_OUTPUT
-          echo "Generated key: $key"    
+          echo "Generated key: $key"   
       
       - name: Validate JAR was created
         id: jar-info
