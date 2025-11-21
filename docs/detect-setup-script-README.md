@@ -1,6 +1,6 @@
 # 🔍 Detect Setup Script Reusable Workflow
 
-**File:** `.github/workflows/detect-setup-script.yml`  
+**File:** [`.github/workflows/detect-setup-script.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/detect-setup-script.yml) 
 **Type:** Reusable Workflow (Called by other workflows)  
 **Purpose:** Searches your repository for Inno Setup (`.iss`) installer scripts and returns their paths for downstream jobs.
 
