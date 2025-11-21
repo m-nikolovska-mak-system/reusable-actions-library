@@ -1,9 +1,7 @@
 # 🚀 Build & Release Java Application Workflow
 
 **Repository:** `.github/workflows/build-and-release-v3.yml`  
-**Status:** ✅ Production Ready | Enterprise Grade  
-**Maintained By:** Platform Engineering Team  
-**Last Updated:** [DATE]
+
 
 ---
 
