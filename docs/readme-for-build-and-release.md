@@ -1,122 +1,130 @@
-# Build & Release Java Application Workflow
+# =====================================================================
+# Workflow: Build & Release Java App (v4)
+# Purpose : End-to-end pipeline for building a JAR, packaging a Windows
+#           installer, publishing it to a GitHub Release, and notifying.
+# Triggers: Manual dispatch + Release creation event
+# =====================================================================
 
-## Table of Contents
-- #overview
-- #quick-start
-- #features
-- #prerequisites
-- #workflow-inputs
-- #pipeline-stages
-- [Troubleshooting
-- [Advanced Usage](##faq
-- [Related Resources](#--
+name: Build & Release Java App (version 3)
 
-## Overview
-This workflow automates the complete build, validation, and release pipeline for Java applications. It:
-- Builds a JAR using Gradle
-- Packages a Windows installer via Inno Setup
-- Publishes artifacts to a GitHub Release
-- Sends Microsoft Teams notifications
+on:
+  workflow_dispatch:
+    inputs:
+      java_version:
+        description: Java version to use
+        required: false
+        default: "17"
 
-**Workflow Location:** `.github/workflows/build-and-release-v3.yml`  
-**Triggers:**  
-- `workflow_dispatch` (manual trigger)  
-- `release` (on release creation)  
+      java_distribution:
+        description: Java distribution (temurin, zulu, etc.)
+        required: false
+        default: "temurin"
 
-**Concurrency:** Prevents overlapping runs for the same release tag.  
-**Maintainer:** Platform Engineering Team  
+      gradle_task:
+        description: Gradle task to run
+        required: false
+        default: "jar"
 
----
+  release:
+    types: [created]
 
-## Quick Start
+# ---------------------------------------------------------------------
+# Concurrency ensures that only one execution runs per release tag
+# ---------------------------------------------------------------------
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || github.run_id }}
+  cancel-in-progress: false
 
-### For Development Teams
-1. **Automatic Release Publishing**
-   - Create a GitHub release → Workflow triggers automatically
-   - Installer uploaded to release assets
+# =====================================================================
+# JOB: Build JAR
+# =====================================================================
+jobs:
+  build_jar:
+    name: Build JAR
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/build-jar.yml@main
+    with:
+      release_tag: ${{ github.event.release.tag_name }}
+      gradle_task: ${{ inputs.gradle_task || 'jar' }}
+      java_version: ${{ inputs.java_version || '17' }}
+      java_distribution: ${{ inputs.java_distribution || 'temurin' }}
 
-2. **Manual Build Testing**
-   - Go to **Actions → Build & Release Java App**
-   - Click **Run workflow**
-   - (Optional) Override Java version or Gradle task
+  # ===================================================================
+  # JOB: Detect .iss installer script
+  # ===================================================================
+  detect_iss:
+    name: Detect Setup Script
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/detect-setup-script.yml@main
+    with:
+      pattern: "**/*.iss"
+      fail_if_missing: true
 
-### For Platform/DevOps Teams
-- No extra setup beyond configuring secrets
-- All reusable workflows are maintained in https://github.com/m-nikolovska-mak-system/reusable-actions-library
+  # ===================================================================
+  # JOB: Validate Inputs
+  # Ensures build_jar produced a non-empty cache key
+  # ===================================================================
+  validate_inputs:
+    name: Validate JAR Cache Key
+    needs: build_jar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate jar_cache_key
+        run: |
+          if [ -z "${{ needs.build_jar.outputs.jar_cache_key }}" ]; then
+            echo "::error::JAR cache key is empty!"
+            exit 1
+          fi
 
----
+  # ===================================================================
+  # JOB: Build Windows Installer using Inno Setup
+  # ===================================================================
+  build_installer:
+    name: Build Windows Installer
+    needs: [build_jar, detect_iss, validate_inputs]
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/build-installer.yml@main
+    with:
+      setup_script: ${{ needs.detect_iss.outputs.setup_script }}
+      jar_path: ${{ needs.build_jar.outputs.jar_path }}
+      jar_cache_key: ${{ needs.build_jar.outputs.jar_cache_key }}
+      app_name: ${{ github.event.repository.name }}
+      app_version: ${{ github.event.release.tag_name }}
+      output_name: "Setup-${{ github.event.release.tag_name }}"
 
-## Features
-| Feature | Description |
-|---------|-------------|
-| **Multi-Stage Pipeline** | Build → Validate → Package → Upload → Notify |
-| **Concurrent Build Prevention** | Avoids overlapping runs |
-| **Input Validation** | Fails fast if critical artifacts missing |
-| **Windows Installer Support** | Packages JAR into `.exe` |
-| **Team Notifications** | Success/failure alerts via Teams |
-| **Flexible Parameters** | Override Java version, distribution, Gradle task |
+  # ===================================================================
+  # JOB: Upload installer to GitHub Release
+  # ===================================================================
+  upload_release:
+    name: Upload Release Asset
+    needs: build_installer
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/upload-release.yml@main
+    with:
+      tag_name: ${{ github.event.release.tag_name }}
+      artifact_name: ${{ needs.build_installer.outputs.installer_artifact_name }}
 
----
+  # ===================================================================
+  # JOB: Notify Success (Microsoft Teams)
+  # Only runs on actual release events
+  # ===================================================================
+  notify_success:
+    name: Notify Success
+    if: success() && github.event_name == 'release'
+    needs: [build_jar, detect_iss, validate_inputs, build_installer, upload_release]
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/teams-notifier.yml@main
+    with:
+      notification_title: "✅ Build & Release Succeeded!"
+      action_required_message: "Release ${{ github.event.release.tag_name }} is ready. View: ${{ github.event.release.html_url }}"
+    secrets:
+      teams_webhook_url: ${{ secrets.TEAMS_WEBHOOK_URL }}
 
-## Prerequisites
-### Repository Requirements
-- Java app with `build.gradle` or `build.gradle.kts`
-- Inno Setup script (`.iss`) in repo
-- GitHub release capability enabled
-
-### Secrets
-| Secret Name | Description |
-|-------------|-------------|
-| `TEAMS_WEBHOOK_URL` | Microsoft Teams webhook URL |
-
-[How to set up Teams webhook →](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incomings
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `java_version` | string | `17` | Java version |
-| `java_distribution` | string | `temurin` | Java distribution |
-| `gradle_task` | string | `jar` | Gradle task |
-
----
-
-## Pipeline Stages
-| Stage | Job | Reusable Workflow |
-|-------|-----|--------------------|
-| **Build JAR** | `build_jar` | [build-jar.yml](https://github.com/m-nikolovska-mak-system/reusable-actions-library/.github/workflows/buildetect Setup Script** | `detect_iss` | [detect-setup-script.yml](https://github.com/m-nikolovska-mak-system/reusable-actions-library/.github/workflows/detect-setup-script** | `validate_inputs` | Inline |
-| **Build Installer** | `build_installer` | [build-installer.yml](https://github.com/m-nikolovska-mak-system/reusable-actionslows/build-installer.yml |
-| **Upload Release** | `upload_release` | [upload-release.yml](https://github.com/m-nikolovska-mak-system/reusable-actions-library/.github/workflows/upload-release.yml/Failure** | `notify_success` / `notify_failure` | [teams-notifier.yml](https://github.com/m-nikolovska-mak-system/reusable-actionsflows/teams-notifier.yml |
-
----
-
-## Troubleshooting
-### ❌ JAR cache key empty
-Check `build_jar` logs → Ensure Gradle wrapper exists.
-
-### ❌ .iss script not found
-Add `.iss` file → Verify pattern in `detect_iss` job.
-
-### ❌ Teams webhook missing
-Add `TEAMS_WEBHOOK_URL` secret.
-
----
-
-## Advanced Usage
-- Override `gradle_task` for `shadowJar` or `nativeImage`.
-- Monitor logs in **Actions tab**.
-- Download artifacts from successful runs.
-
----
-
-## FAQ
-**Q: Can I use a different Java distribution?**  
-Yes, override `java_distribution`.
-
-**Q: What if I don't have an .iss file?**  
-Workflow requires installer setup. Contact Platform Engineering.
-
----
-
-## Related Resources
-- [ttps://jrsoftware.org/isinfo.php
-- https://docs.gradle.org
-- https://docs.github.com/en/actions
-- [Reusable Actions Library](https://github.com/m-nikolovskas-library
+  # ===================================================================
+  # JOB: Notify Failure
+  # ===================================================================
+  notify_failure:
+    name: Notify Failure
+    if: failure()
+    needs: [build_jar, detect_iss, validate_inputs, build_installer, upload_release]
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/teams-notifier.yml@main
+    with:
+      notification_title: "🚨 Build & Release Failed!"
+      action_required_message: "Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+    secrets:
+      teams_webhook_url: ${{ secrets.TEAMS_WEBHOOK_URL }}
