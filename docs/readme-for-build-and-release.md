@@ -1,8 +1,9 @@
 # 🚀 Build & Release Java Application Workflow
 
 **Location:** `.github/workflows/build-and-release-v3.yml`
+
 **Reusable Components:** Stored in `reusable-actions-library/.github/workflows/` (separate repo)  
-**Status:** ✅ Production Ready | Enterprise Grade  
+
 ---
 
 ## 📌 What Does This Do?
