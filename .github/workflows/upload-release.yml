@@ -81,5 +81,4 @@ jobs:
           echo "**Files Uploaded:**" >> $GITHUB_STEP_SUMMARY
           ls ./release-assets/${{ inputs.file_pattern }} >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Files successfully uploaded to GitHub Release" >> $GITHUB_STEP_SUMMAR
 
