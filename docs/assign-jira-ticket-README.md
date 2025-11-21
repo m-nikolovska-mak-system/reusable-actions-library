@@ -17,7 +17,7 @@ jobs:
       JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       JIRA_URL: ${{ secrets.JIRA_URL }}
-
+```
 
 ## 📥 Inputs
 
