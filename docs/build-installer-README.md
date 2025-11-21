@@ -1,6 +1,6 @@
 # 🪟 Build Windows Installer Reusable Workflow
 
-**File:** `.github/workflows/build-installer.yml`  
+**File:** [`.github/workflows/build-installer.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/build-installer.yml)
 **Type:** Reusable Workflow (Called by other workflows)  
 **Purpose:** Packages a JAR into a Windows `.exe` installer using Inno Setup  
 **Environment:** Windows runner (builds `.exe` files)  
