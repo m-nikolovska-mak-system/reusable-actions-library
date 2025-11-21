@@ -1,6 +1,6 @@
 # 📤 Upload Release Asset Reusable Workflow
 
-**File:** `.github/workflows/upload-release.yml`  
+**File:** [`.github/workflows/upload-release.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/upload-release.yml)
 **Type:** Reusable Workflow (Called by other workflows)  
 **Purpose:** Attaches built files (like `.exe` installers) to GitHub Releases so users can download them  
 
