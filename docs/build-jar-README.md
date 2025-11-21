@@ -1,6 +1,6 @@
 # 🔨 Build JAR Reusable Workflow
 
-**File:** `.github/workflows/build-jar.yml`  
+**File:** [`.github/workflows/build-jar.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/build-jar.yml)
 **Type:** Reusable Workflow (Called by other workflows)  
 **Purpose:** Compiles your Java code into a `.jar` file using Gradle  
 
