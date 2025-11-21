@@ -1,6 +1,7 @@
 # 🚀 Build & Release Java Application Workflow
 
-**Location:** `.github/workflows/build-and-release-v3.yml`  
+**Location:** [`.github/workflows/build-and-release-v3.yml`](https://github.com/m-nikolovska-mak-system/.github/blob/main/workflow-templates/build-and-release-v3.yml)
+
 
 ---
 
