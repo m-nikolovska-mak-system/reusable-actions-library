@@ -23,7 +23,7 @@ Documentation:
 Located at:  
 `.github/workflows/teams-notifier.yml`  
 Documentation:  
-[docs/teams-notifier.md](teams-notifier.md)
+[`docs/teams-notifier-README.md`](teams-notifier-README.md)
 
 ---
 
