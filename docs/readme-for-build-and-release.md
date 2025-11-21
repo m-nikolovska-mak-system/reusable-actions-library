@@ -538,8 +538,3 @@ A: GitHub → Actions tab → Select workflow run → View each job
 A: Yes, set `gradle_task` to `build` (includes tests).
 
 ---
-
-
-**Last Updated:** November 21, 2025  
-**Maintained By:** Platform Engineering Team  
-**Version:** 3.0
