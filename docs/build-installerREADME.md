@@ -7,7 +7,7 @@
 
 ---
 
-## 🎯 What This Does (Plain English)
+## 🎯 What This Does
 
 Takes a compiled JAR file and wraps it in a Windows installer (`.exe`) that end users can download and run.
 
