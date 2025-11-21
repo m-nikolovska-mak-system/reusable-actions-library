@@ -57,6 +57,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     name: Build JAR
+    permissions:
+        contents: read
     outputs:
       jar_cache_key: ${{ steps.keygen.outputs.key }}
       jar_filename: ${{ steps.jar-info.outputs.filename }}
@@ -83,12 +85,13 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/settings.gradle*') }}
           restore-keys: ${{ runner.os }}-gradle-
 
       
       - name: Build JAR with Gradle
         run: |
+          set -euo pipefail
           echo "🔨 Building JAR with Gradle..."
           echo "Task: ${{ inputs.gradle_task }}"
           echo "Args: ${{ inputs.additional_gradle_args }}"
@@ -102,6 +105,7 @@ jobs:
       - name: Generate cache key
         id: keygen
         run: |
+          set -euo pipefail
           jar_file=$(ls ${{ inputs.jar_output_path }} 2>/dev/null | head -n 1)
           if [ -z "$jar_file" ]; then
             echo "❌ ERROR: No JAR file found at ${{ inputs.jar_output_path }}"
@@ -114,6 +118,7 @@ jobs:
       - name: Validate JAR was created
         id: jar-info
         run: |
+          set -euo pipefail
           echo "🔍 Looking for JAR in: ${{ inputs.jar_output_path }}"
           
           # Find the JAR file
@@ -144,6 +149,8 @@ jobs:
         with:
           path: build/libs/*.jar
           key: ${{ steps.keygen.outputs.key }}
+          enableCrossOsArchive: true
+
       
       
       - name: Build summary
