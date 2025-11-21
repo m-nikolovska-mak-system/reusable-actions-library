@@ -64,6 +64,8 @@ on:
 
 jobs:
   build-installer:
+    permissions:
+        contents: read
     runs-on: windows-latest
     name: Build Windows Installer
     outputs:
@@ -86,6 +88,7 @@ jobs:
       
       - name: Verify JAR was restored
         run: |
+          $ErrorActionPreference = "Stop"
           Write-Host "🔍 Verifying JAR file..."
           
           $jarFiles = Get-ChildItem -Path "build\libs" -Filter "*.jar" -ErrorAction SilentlyContinue
@@ -117,6 +120,7 @@ jobs:
       - name: Get JAR filename
         id: jar-name
         run: |
+          $ErrorActionPreference = "Stop"
           $jar = Get-ChildItem "build\libs" -Filter *.jar | Select-Object -First 1
           $jarName = $jar.Name
           echo "jar_file=$jarName" >> $env:GITHUB_OUTPUT
@@ -124,6 +128,7 @@ jobs:
       
       - name: Verify Inno Setup script exists
         run: |
+          $ErrorActionPreference = "Stop"
           $scriptPath = "${{ inputs.setup_script }}"
           Write-Host "🔍 Looking for Inno Setup script: $scriptPath"
           
@@ -138,6 +143,7 @@ jobs:
       
       - name: Install Inno Setup ${{ inputs.inno_setup_version }}
         run: |
+            $ErrorActionPreference = "Stop"
             Write-Host "📥 Checking Inno Setup installation..."
             $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
         
@@ -157,6 +163,7 @@ jobs:
       
       - name: Validate Inno Setup installation
         run: |
+          $ErrorActionPreference = "Stop"
           $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           
           if (!(Test-Path $isccPath)) {
@@ -175,6 +182,8 @@ jobs:
       
       - name: Prepare build environment
         run: |
+          $ErrorActionPreference = "Stop"
+
           Write-Host "📂 Preparing output directory..."
           
           if (!(Test-Path "output")) {
@@ -225,7 +234,17 @@ jobs:
           
           # Add icon if provided
           if ("${{ inputs.installer_icon }}" -ne "") {
+
+            if (!(Test-Path "${{ inputs.installer_icon }}")) {
+
+              Write-Error "❌ Icon file not found: ${{ inputs.installer_icon }}"
+
+              exit 1
+
+            }
+
             $compilerArgs += "/DIconFile=${{ inputs.installer_icon }}"
+
           }
           
           Write-Host "🚀 Running Inno Setup compiler..."
@@ -253,6 +272,7 @@ jobs:
       - name: Verify installer was created
         id: build-info
         run: |
+          $ErrorActionPreference = "Stop"
           Write-Host "🔍 Verifying installer output..."
           Write-Host ""
           
