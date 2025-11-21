@@ -91,11 +91,11 @@ Override (optional):
 
 Each stage uses a reusable workflow from `reusable-actions-library`. See their docs:
 
-1. **[build-jar README](../reusable-actions-library/docs/build-jar-README.md)** - Compile Java
-2. **[detect-setup-script README](../reusable-actions-library/docs/detect-setup-script-README.md)** - Find .iss
-3. **[build-installer README](../reusable-actions-library/docs/build-installer-README.md)** - Package .exe
-4. **[upload-release README](../reusable-actions-library/docs/upload-release-README.md)** - Upload to release
-5. **[teams-notifier README](../reusable-actions-library/docs/teams-notifier-README.md)** - Send Teams msg
+1. **[build-jar README](../docs/build-jar-README.md)** - Compile Java
+2. **[detect-setup-script README](../docs/detect-setup-script-README.md)** - Find .iss
+3. **[build-installer README](../docs/build-installer-README.md)** - Package .exe
+4. **[upload-release README](../upload-release-README.md)** - Upload to release
+5. **[teams-notifier README](../docs/teams-notifier-README.md)** - Send Teams msg
 
 ---
 
@@ -148,7 +148,7 @@ Yes, use manual dispatch (Actions → Run workflow).
 11, 17, 21 (or any supported by GitHub Actions).
 
 **Can I customize the installer?**  
-Yes, edit your `.iss` file. See [build-installer docs](../reusable-actions-library/docs/build-installer-README.md).
+Yes, edit your `.iss` file. See [build-installer docs](../docs/build-installer-README.md).
 
 **Can I skip Teams notifications?**  
 Yes, but not recommended. Ask Platform Eng if needed.
