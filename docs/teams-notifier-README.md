@@ -3,8 +3,8 @@
 This reusable workflow sends richly formatted Adaptive Card messages to a Microsoft Teams channel.  
 It is designed for multi-repository use and supports customizable content, metadata injection, and file lists.
 
-Workflow file:  
-`.github/workflows/teams-notifier.yml`
+**File:** [`.github/workflows/teams-notifier.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/teams-notifier.yml)
+
 
 ---
 
