@@ -94,7 +94,7 @@ Each stage uses a reusable workflow from `reusable-actions-library`. See their d
 1. **[build-jar README](../docs/build-jar-README.md)** - Compile Java
 2. **[detect-setup-script README](../docs/detect-setup-script-README.md)** - Find .iss
 3. **[build-installer README](../docs/build-installer-README.md)** - Package .exe
-4. **[upload-release README](../upload-release-README.md)** - Upload to release
+4. **[upload-release README](../docs/upload-release-README.md)** - Upload to release
 5. **[teams-notifier README](../docs/teams-notifier-README.md)** - Send Teams msg
 
 ---
