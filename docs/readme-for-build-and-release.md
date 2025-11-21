@@ -180,29 +180,6 @@ gradle_task: nativeImage  # For GraalVM native compilation
 - **Failure diagnosis:** Check individual job logs for error messages
 - **Team alerts:** Monitor Teams channel for notifications
 
----
-
-## SLA & Support
-
-| Metric | Target |
-|--------|--------|
-| Build Time (typical) | 2-10 minutes |
-| 99.9% Uptime | Maintained by Platform Engineering |
-| Support Response | 2 business hours |
-
-**For issues or feature requests:**  
-Contact: `platform-engineering@company.com`  
-Slack: `#platform-engineering`
-
----
-
-## Version History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 3.0 | 2025-01-21 | Enterprise release, added Teams notifications, input validation |
-| 2.0 | 2024-12-15 | Added installer support, conditional upload |
-| 1.0 | 2024-11-01 | Initial JAR build automation |
 
 ---
 
