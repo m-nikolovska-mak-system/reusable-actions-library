@@ -1,3 +1,6 @@
+name: Upload Release Asset
+
+
 on:
   workflow_call:
     inputs:
@@ -20,6 +23,10 @@ on:
 jobs:
   upload:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    name: Upload to GitHub Release
+
 
     steps:
       - name: Download installer artifact
@@ -38,11 +45,13 @@ jobs:
 
       - name: List downloaded files
         run: |
+          set -euo pipefail
           echo "=== Contents of release-assets ==="
           ls -lah ./release-assets || true
 
       - name: Validate file presence
         run: |
+          set -euo pipefail
           files=$(ls ./release-assets/${{ inputs.file_pattern }} 2>/dev/null)
           if [ -z "$files" ]; then
             echo "❌ No files matching pattern: ${{ inputs.file_pattern }}"
@@ -59,3 +68,18 @@ jobs:
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+      
+      - name: Build summary
+        run: |
+          set -euo pipefail
+          echo "### ✅ Release Upload Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** \`${{ inputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact Name:** \`${{ inputs.artifact_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Files Uploaded:**" >> $GITHUB_STEP_SUMMARY
+          ls ./release-assets/${{ inputs.file_pattern }} >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Files successfully uploaded to GitHub Release" >> $GITHUB_STEP_SUMMAR
+
