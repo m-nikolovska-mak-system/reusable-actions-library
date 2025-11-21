@@ -497,11 +497,11 @@ Actions → Run workflow
 - **Main Workflow:** `build-and-release-v3.yml`
 
 ### In Reusable Library (`reusable-actions-library/.github/workflows/`)
-- **[build-jar.yml](../../reusable-actions-library/docs/build-jar-README.md)** - Compile Java
-- **[detect-setup-script.yml](../../reusable-actions-library/docs/detect-setup-script-README.md)** - Find `.iss`
-- **[build-installer.yml](../../reusable-actions-library/docs/build-installer-README.md)** - Package `.exe`
-- **[upload-release.yml](../../reusable-actions-library/docs/upload-release-README.md)** - Upload assets
-- **[teams-notifier.yml](../../reusable-actions-library/docs/teams-notifier-README.md)** - Send Teams message
+- **[build-jar.yml](../../reusable-actions-library/docs/build-jarREADME.md)** - Compile Java
+- **[detect-setup-script.yml](../../reusable-actions-library/docs/detect-setup-scriptREADME.md)** - Find `.iss`
+- **[build-installer.yml](../../reusable-actions-library/docs/build-installerREADME.md)** - Package `.exe`
+- **[upload-release.yml](../../reusable-actions-library/docs/upload-releaseREADME.md)** - Upload assets
+- **[teams-notifier.yml](../../reusable-actions-library/docs/teams-notifierREADME.md)** - Send Teams message
 
 ### External Links
 - [Inno Setup Documentation](https://jrsoftware.org/isinfo.php)
@@ -517,7 +517,7 @@ Actions → Run workflow
 A: Yes, use "Run workflow" (manual dispatch). See [Manual Dispatch section](#how-to-trigger-manually-testing).
 
 **Q: Can I customize the installer appearance?**  
-A: Yes, edit your `.iss` file. See [build-installer-README.md troubleshooting](../../reusable-actions-library/docs/build-installer-README.md#troubleshooting).
+A: Yes, edit your `.iss` file. See [build-installerREADME.md troubleshooting](../../reusable-actions-library/docs/build-installerREADME.md#troubleshooting).
 
 **Q: What Java versions are supported?**  
 A: 11, 17, 21 (or any version supported by GitHub Actions).
