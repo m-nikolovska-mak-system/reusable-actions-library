@@ -83,9 +83,6 @@ Override (optional):
 ### Workflow stuck
 → First build downloads deps (slow). Wait 5-10 min. Subsequent builds use cache.
 
-### Installer is 100+ MB
-→ Normal! Java apps include JVM + dependencies. This is expected.
-
 ---
 
 ## 📚 Reusable Workflows
