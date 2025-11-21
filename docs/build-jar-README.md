@@ -6,7 +6,7 @@
 
 ---
 
-## 🎯 What This Does (Plain English)
+## 🎯 What This Does 
 
 This workflow takes your Java source code, runs Gradle to compile it, produces a JAR file, and saves it so other workflows can use it.
 
