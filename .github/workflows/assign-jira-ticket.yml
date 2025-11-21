@@ -98,6 +98,14 @@ jobs:
           echo "current_assignee_id=$CURRENT_ASSIGNEE_ID" >> $GITHUB_OUTPUT
           echo "current_assignee_email=$CURRENT_ASSIGNEE_EMAIL" >> $GITHUB_OUTPUT
 
+      
+          echo "DEBUG: Assigning to accountId=$ACCOUNT_ID for issue=$ISSUE_KEY"
+            curl --silent -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+           -X GET \
+           -H "Content-Type: application/json" \
+           "${JIRA_URL}/rest/api/3/issue/${ISSUE_KEY}" || true
+
+
       - name: Assign Jira issue if needed
         run: |
           set -euo pipefail
