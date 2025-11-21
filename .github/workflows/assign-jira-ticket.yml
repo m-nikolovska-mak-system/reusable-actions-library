@@ -36,38 +36,50 @@ jobs:
           JIRA_URL: ${{ secrets.JIRA_URL }}
           ISSUE_KEY: ${{ inputs.issue_key }}
           ASSIGNEE_EMAIL: ${{ inputs.assignee_email }}
-        run: |
-          set -e
-          if [ -z "$JIRA_EMAIL" ] || [ -z "$JIRA_API_TOKEN" ] || [ -z "$JIRA_URL" ]; then
-            echo "Missing Jira secrets"
+        run: |  
+          set -euo pipefail
+
+          echo "🔍 Validating required secrets..."
+          if [[ -z "${JIRA_EMAIL}" || -z "${JIRA_API_TOKEN}" || -z "${JIRA_URL}" ]]; then
+            echo "::error::Missing required Jira secrets"
             exit 1
           fi
 
-          echo "Looking up Jira user by email: $ASSIGNEE_EMAIL"
-          QUERY_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$ASSIGNEE_EMAIL")
-          SEARCH_JSON=$(curl -s -u "$JIRA_EMAIL:$JIRA_API_TOKEN" "$JIRA_URL/rest/api/3/user/search?query=$QUERY_ENC")
-          ACCOUNT_ID=$(echo "$SEARCH_JSON" | jq -r '.[0].accountId // empty') || true
+          echo "🔎 Searching Jira user: ${ASSIGNEE_EMAIL}"
+          QUERY_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "${ASSIGNEE_EMAIL}")
 
-          if [ -z "$ACCOUNT_ID" ]; then
-            echo "User not found: $ASSIGNEE_EMAIL"
-            echo "Response: $SEARCH_JSON"
+          # More reliable curl (retry, fail on non-2xx)
+          SEARCH_JSON=$(curl --silent --fail --location \
+            --retry 3 --retry-delay 2 \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+            "${JIRA_URL}/rest/api/3/user/search?query=${QUERY_ENC}"
+          )
+
+          ACCOUNT_ID=$(echo "${SEARCH_JSON}" | jq -r '.[0].accountId // empty')
+
+          if [[ -z "${ACCOUNT_ID}" ]]; then
+            echo "::error::Jira user not found for email: ${ASSIGNEE_EMAIL}"
+            echo "Response: ${SEARCH_JSON}"
             exit 1
           fi
 
-          echo "Found accountId: $ACCOUNT_ID"
-          PAYLOAD=$(jq -n --arg acc "$ACCOUNT_ID" '{accountId: $acc}')
+          echo "✅ Found Jira accountId: ${ACCOUNT_ID}"
 
-          echo "Assigning issue $ISSUE_KEY to $ASSIGNEE_EMAIL"
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+          PAYLOAD=$(jq -n --arg acc "${ACCOUNT_ID}" '{accountId: $acc}')
+
+          echo "📌 Assigning issue ${ISSUE_KEY} → ${ASSIGNEE_EMAIL}"
+
+          RESPONSE=$(curl --silent --output /dev/null --write-out "%{http_code}" \
+            --fail --location \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -X PUT \
             -H "Content-Type: application/json" \
-            --data "$PAYLOAD" \
-            "$JIRA_URL/rest/api/3/issue/$ISSUE_KEY/assignee")
+            --data "${PAYLOAD}" \
+            "${JIRA_URL}/rest/api/3/issue/${ISSUE_KEY}/assignee" || true)
 
-          if [ "$RESPONSE" -ne 204 ]; then
-            echo "Failed. HTTP: $RESPONSE"
+          if [[ "${RESPONSE}" != "204" ]]; then
+            echo "::error::Assignment failed (HTTP ${RESPONSE})"
             exit 1
           fi
 
-          echo "Success: Issue $ISSUE_KEY → $ASSIGNEE_EMAIL"
+          echo "🎉 Successfully assigned ${ISSUE_KEY} to ${ASSIGNEE_EMAIL}"
