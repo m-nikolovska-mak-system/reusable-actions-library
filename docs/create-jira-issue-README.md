@@ -2,7 +2,7 @@
 # 📝 Create Jira Issue — Reusable Workflow
 
 **File:** [`.github/workflows/create-jira-issue.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/create-jira-issue.yml) — Reusable workflow to create a Jira issue in a specified project with validation and outputs the issue key and URL
-**Environment:** Ubuntu runner  
+
 
 ---
 
