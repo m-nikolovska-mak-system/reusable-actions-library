@@ -1,0 +1,52 @@
+name: Create Jira Issue
+
+on:
+  workflow_call:
+    inputs:
+      project_key:
+        description: "Jira project key"
+        required: true
+        type: string
+      issuetype:
+        description: "Issue type (e.g., Task, Bug)"
+        required: true
+        type: string
+      summary:
+        description: "Summary for the Jira issue"
+        required: true
+        type: string
+      description:
+        description: "Description for the Jira issue"
+        required: false
+        type: string
+      assignee:
+        description: "Email of assignee (optional)"
+        required: false
+        type: string
+    secrets:
+      JIRA_BASE_URL:
+        required: true
+      JIRA_USER_EMAIL:
+        required: true
+      JIRA_API_TOKEN:
+        required: true
+
+jobs:
+  create-jira-issue:
+    runs-on: ubuntu-latest
+    outputs:
+      issue_key: ${{ steps.create.outputs.issue_key }}
+    steps:
+      - name: Create Jira issue
+        id: create
+        uses: atlassian/gajira-create@v3
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        with:
+          project: ${{ inputs.project_key }}
+          issuetype: ${{ inputs.issuetype }}
+          summary: ${{ inputs.summary }}
+          description: ${{ inputs.description }}
+          assignee: ${{ inputs.assignee }}
