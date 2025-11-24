@@ -1,23 +1,18 @@
-
 # Create Jira Issue (Reusable)
 on:
   workflow_call:
     inputs:
       project_key:
-        description: "Jira project key"
         required: true
         type: string
       issuetype:
-        description: "Issue type (default: Task)"
         required: false
         default: "Task"
         type: string
       summary:
-        description: "Summary for the Jira issue"
         required: true
         type: string
       description:
-        description: "Description for the Jira issue"
         required: false
         type: string
     secrets:
@@ -31,15 +26,9 @@ on:
 jobs:
   create-jira:
     runs-on: ubuntu-latest
-    outputs:
-      issue_key: ${{ steps.create.outputs.issue_key }}
     steps:
-      - name: Ensure jq is installed
-        run: |
-          if ! command -v jq >/dev/null; then
-            sudo apt-get update -y
-            sudo apt-get install -y jq
-          fi
+      - name: Install jq
+        run: sudo apt-get update -y && sudo apt-get install -y jq
 
       - name: Create Jira issue
         id: create
@@ -54,25 +43,44 @@ jobs:
             --arg sum "$SUMMARY" \
             --arg desc "$DESCRIPTION" \
             --arg type "$TYPE" \
+            --arg reporter "${{ secrets.JIRA_EMAIL }}" \
             '{
               fields: {
                 project: { key: $proj },
                 summary: $sum,
                 issuetype: { name: $type },
+                reporter: { emailAddress: $reporter },
                 description: {
                   type: "doc",
                   version: 1,
                   content: [
-                    { type: "paragraph", content: [{ type: "text", text: $desc }] }
+                    { type: "paragraph", content: [ { type: "text", text: $desc } ] }
                   ]
                 }
               }
             }'
           )
 
-          RESPONSE=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-            -X POST -H "Content-Type: application/json" \
-            --data "$PAYLOAD" "${{ secrets.JIRA_URL }}/rest/api/3/issue")
+          echo "Request payload:"
+          echo "$PAYLOAD"
+
+          RESPONSE=$(curl -s -D /tmp/headers \
+            -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            --data "$PAYLOAD" \
+            "${{ secrets.JIRA_URL }}/rest/api/3/issue")
+
+          echo "Jira response:"
+          echo "$RESPONSE"
 
           ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.key // empty')
+
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "::error::Jira issue creation failed"
+            echo "Headers:"
+            cat /tmp/headers
+            exit 1
+          fi
+
           echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
