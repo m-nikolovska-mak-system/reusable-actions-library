@@ -3,7 +3,7 @@
 # 📝 Assign Jira Issue — Reusable Workflow
 
 **File:** [`.github/workflows/assign-jira-issue.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/assign-jira-ticket.yml) — Reusable workflow to safely assign a Jira issue to a user with email validation and assignable check.
-**Environment:** Ubuntu runner
+
 
 ---
 
