@@ -23,6 +23,12 @@ on:
       JIRA_URL:
         required: true
 
+
+    outputs:
+      issue_key:
+        description: "Generated Jira issue key (ex: ERP-123)"
+        value: ${{ jobs.create-jira.outputs.issue_key }}
+
 jobs:
   create-jira:
     runs-on: ubuntu-latest
