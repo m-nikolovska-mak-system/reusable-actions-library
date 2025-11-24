@@ -1,5 +1,5 @@
-name: Create Jira Issue
 
+# Create Jira Issue (Reusable)
 on:
   workflow_call:
     inputs:
@@ -8,8 +8,9 @@ on:
         required: true
         type: string
       issuetype:
-        description: "Issue type (e.g., Task, Bug)"
-        required: true
+        description: "Issue type (default: Task)"
+        required: false
+        default: "Task"
         type: string
       summary:
         description: "Summary for the Jira issue"
@@ -19,37 +20,59 @@ on:
         description: "Description for the Jira issue"
         required: false
         type: string
-      assignee:
-        description: "Email of assignee (optional)"
-        required: false
-        type: string
     secrets:
-      JIRA_BASE_URL:
-        required: true
-      JIRA_USER_EMAIL:
+      JIRA_EMAIL:
         required: true
       JIRA_API_TOKEN:
         required: true
+      JIRA_URL:
+        required: true
 
 jobs:
-  create-jira-issue:
+  create-jira:
     runs-on: ubuntu-latest
     outputs:
       issue_key: ${{ steps.create.outputs.issue_key }}
     steps:
-      
-    - name: Create Jira issue
-      id: create
-      uses: atlassian/gajira-create@v3
-      env:
-        JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-        JIRA_USER_EMAIL: ${{ secrets.JIRA_USER }}
-        JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      with:
-        cloud: true
-        project: ${{ inputs.project_key }}
-        issuetype: ${{ inputs.issuetype }}
-        summary: ${{ inputs.summary }}
-        description: ${{ inputs.description }}
-        fields: '{"assignee":{"name":"${{ inputs.assignee }}"}}'
+      - name: Ensure jq is installed
+        run: |
+          if ! command -v jq >/dev/null; then
+            sudo apt-get update -y
+            sudo apt-get install -y jq
+          fi
 
+      - name: Create Jira issue
+        id: create
+        run: |
+          SUMMARY="${{ inputs.summary }}"
+          DESCRIPTION="${{ inputs.description }}"
+          PROJECT="${{ inputs.project_key }}"
+          TYPE="${{ inputs.issuetype }}"
+
+          PAYLOAD=$(jq -n \
+            --arg proj "$PROJECT" \
+            --arg sum "$SUMMARY" \
+            --arg desc "$DESCRIPTION" \
+            --arg type "$TYPE" \
+            '{
+              fields: {
+                project: { key: $proj },
+                summary: $sum,
+                issuetype: { name: $type },
+                description: {
+                  type: "doc",
+                  version: 1,
+                  content: [
+                    { type: "paragraph", content: [{ type: "text", text: $desc }] }
+                  ]
+                }
+              }
+            }'
+          )
+
+          RESPONSE=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -X POST -H "Content-Type: application/json" \
+            --data "$PAYLOAD" "${{ secrets.JIRA_URL }}/rest/api/3/issue")
+
+          ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.key // empty')
+          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
