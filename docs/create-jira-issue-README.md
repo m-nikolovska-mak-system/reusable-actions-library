@@ -1,5 +1,3 @@
-Here are the **two short, user-focused README files** for your reusable workflows:
-
 ***
 
 ### ✅ `docs/create-jira-issue.md`
