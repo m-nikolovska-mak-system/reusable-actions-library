@@ -37,16 +37,19 @@ jobs:
     outputs:
       issue_key: ${{ steps.create.outputs.issue_key }}
     steps:
-      - name: Create Jira issue
-        id: create
-        uses: atlassian/gajira-create@v3
-        env:
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-        with:
-          project: ${{ inputs.project_key }}
-          issuetype: ${{ inputs.issuetype }}
-          summary: ${{ inputs.summary }}
-          description: ${{ inputs.description }}
-          assignee: ${{ inputs.assignee }}
+      
+    - name: Create Jira issue
+      id: create
+      uses: atlassian/gajira-create@v3
+      env:
+        JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+        JIRA_USER_EMAIL: ${{ secrets.JIRA_USER }}
+        JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      with:
+        cloud: true
+        project: ${{ inputs.project_key }}
+        issuetype: ${{ inputs.issuetype }}
+        summary: ${{ inputs.summary }}
+        description: ${{ inputs.description }}
+        fields: '{"assignee":{"name":"${{ inputs.assignee }}"}}'
+
