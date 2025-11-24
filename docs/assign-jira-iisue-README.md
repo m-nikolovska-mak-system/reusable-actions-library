@@ -1,6 +1,4 @@
-Here’s a clean, enterprise-ready README for **Assign Jira Issue (Safe Version)** workflow, modeled after the one you wrote for create-jira-issue:
 
----
 
 # 📝 Assign Jira Issue — Reusable Workflow
 
