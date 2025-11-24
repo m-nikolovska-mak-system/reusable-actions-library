@@ -32,6 +32,11 @@ on:
 jobs:
   create-jira:
     runs-on: ubuntu-latest
+    outputs:
+      issue_key: ${{ steps.create.outputs.issue_key }}
+
+
+    
     steps:
       - name: Install jq
         run: sudo apt-get update -y && sudo apt-get install -y jq
