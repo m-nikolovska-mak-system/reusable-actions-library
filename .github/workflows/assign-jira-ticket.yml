@@ -1,14 +1,14 @@
-name: Assign Jira Issue
+name: Assign Jira Issue (Safe Version)
 
 on:
   workflow_call:
     inputs:
       issue_key:
-        description: 'Jira issue key (e.g. ABC-123)'
+        description: "Jira issue key (e.g. ABC-123)"
         required: true
         type: string
       assignee_email:
-        description: 'Assignee email in Jira'
+        description: "Jira user email"
         required: true
         type: string
     secrets:
@@ -22,201 +22,152 @@ on:
 jobs:
   assign:
     runs-on: ubuntu-latest
-    name: Assign Jira Issue
+    name: Safe Jira Assignment
 
     steps:
-      - name: Validate Jira secrets and inputs
+      - name: Ensure jq is installed
+        run: |
+          if ! command -v jq &>/dev/null; then
+            echo "📦 jq not found — installing"
+            sudo apt-get update -y
+            sudo apt-get install -y jq
+          fi
+
+      - name: Validate inputs and secrets
         run: |
           set -euo pipefail
-          echo "🔍 Validating required secrets and inputs..."
-          
-          if [[ -z "${{ secrets.JIRA_EMAIL }}" ]]; then
-            echo "::error::JIRA_EMAIL secret is missing"
-            exit 1
-          fi
-          
-          if [[ -z "${{ secrets.JIRA_API_TOKEN }}" ]]; then
-            echo "::error::JIRA_API_TOKEN secret is missing"
-            exit 1
-          fi
-          
-          if [[ -z "${{ secrets.JIRA_URL }}" ]]; then
-            echo "::error::JIRA_URL secret is missing"
-            exit 1
-          fi
-          
-          if [[ -z "${{ inputs.issue_key }}" ]]; then
-            echo "::error::issue_key input is missing"
-            exit 1
-          fi
-          
-          if [[ -z "${{ inputs.assignee_email }}" ]]; then
-            echo "::error::assignee_email input is missing"
-            exit 1
-          fi
-          
-          # Validate issue key format (e.g., ABC-123)
-          if ! [[ "${{ inputs.issue_key }}" =~ ^[A-Z]+-[0-9]+$ ]]; then
-            echo "::error::Invalid issue_key format. Expected format: ABC-123"
-            exit 1
-          fi
-          
-          # Validate email format
-          if ! [[ "${{ inputs.assignee_email }}" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
-            echo "::error::Invalid email format for assignee_email"
-            exit 1
-          fi
-          
-          echo "✅ All validations passed"
+          echo "🔍 Validating inputs..."
 
-      - name: Encode assignee email for URL
-        id: encode_email
+          # Secrets
+          [[ -z "${{ secrets.JIRA_EMAIL }}" ]] && echo "::error::Missing JIRA_EMAIL" && exit 1
+          [[ -z "${{ secrets.JIRA_API_TOKEN }}" ]] && echo "::error::Missing JIRA_API_TOKEN" && exit 1
+          [[ -z "${{ secrets.JIRA_URL }}" ]] && echo "::error::Missing JIRA_URL" && exit 1
+          
+          # Inputs
+          ISSUE="${{ inputs.issue_key }}"
+          EMAIL="${{ inputs.assignee_email }}"
+
+          [[ -z "$ISSUE" ]] && echo "::error::Missing issue key" && exit 1
+          [[ -z "$EMAIL" ]] && echo "::error::Missing assignee email" && exit 1
+
+          if ! [[ "$ISSUE" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]; then
+            echo "::error::Issue key format invalid. Expected: ABC-123"
+            exit 1
+          fi
+
+          if ! [[ "$EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+            echo "::error::Invalid email format"
+            exit 1
+          fi
+
+          echo "✅ Validation passed"
+
+      - name: Search Jira user by email
+        id: search_user
         run: |
-          # URL-encode the email safely
+          set -euo pipefail
+          echo "🔎 Looking up user: ${{ inputs.assignee_email }}"
+
           ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${{ inputs.assignee_email }}'))")
-          echo "encoded_email=$ENCODED" >> $GITHUB_OUTPUT
-          echo "✅ Encoded email: $ENCODED"
+          echo "encoded=$ENCODED" >> $GITHUB_OUTPUT
 
-      - name: Lookup Jira user by email
-        id: lookup_user
-        run: |
-          set -euo pipefail
-          echo "🔎 Searching Jira user by email: ${{ inputs.assignee_email }}"
-          
-          HTTP_CODE=$(curl --silent --write-out "%{http_code}" --output response.json \
-            --retry 3 --retry-delay 2 \
+          curl -sS \
             -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-            "${{ secrets.JIRA_URL }}/rest/api/3/user/search?query=${{ steps.encode_email.outputs.encoded_email }}"
-          )
-          
-          if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "::error::Failed to search Jira users (HTTP $HTTP_CODE)"
-            cat response.json || true
+            "${{ secrets.JIRA_URL }}/rest/api/3/user/search?query=$ENCODED" \
+            -o users.json
+
+          COUNT=$(jq 'length' users.json)
+
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "::error::No Jira user found for this email"
+            cat users.json
             exit 1
           fi
-          
-          # Extract account ID from response
-          ACCOUNT_ID=$(jq -r '.[0].accountId // empty' response.json)
-          
-          if [[ -z "$ACCOUNT_ID" ]]; then
-            echo "::error::Jira user not found for email: ${{ inputs.assignee_email }}"
-            echo "Response from Jira:"
-            cat response.json || true
-            echo ""
-            echo "💡 Tip: Make sure the email address exists in Jira and user has access"
+
+          if [[ "$COUNT" -gt 1 ]]; then
+            echo "::error::Multiple Jira users match this email — ambiguous"
+            cat users.json
             exit 1
           fi
-          
-          # Get display name for logging
-          DISPLAY_NAME=$(jq -r '.[0].displayName // "Unknown"' response.json)
-          
-          echo "✅ Found Jira user: $DISPLAY_NAME"
-          echo "   Account ID: $ACCOUNT_ID"
-          echo "   Email: ${{ inputs.assignee_email }}"
-          
+
+          ACCOUNT_ID=$(jq -r '.[0].accountId' users.json)
+          DISPLAY_NAME=$(jq -r '.[0].displayName' users.json)
+
           echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
           echo "display_name=$DISPLAY_NAME" >> $GITHUB_OUTPUT
-          
-          rm -f response.json
 
-      - name: Verify issue exists
-        id: verify_issue
+          echo "✅ Found user: $DISPLAY_NAME ($ACCOUNT_ID)"
+
+      - name: Check if user is assignable for this issue
+        id: check_assignable
         run: |
           set -euo pipefail
-          echo "🔍 Verifying issue ${{ inputs.issue_key }} exists..."
-          
-          HTTP_CODE=$(curl --silent --write-out "%{http_code}" --output issue.json \
-            --retry 3 --retry-delay 2 \
+          ISSUE="${{ inputs.issue_key }}"
+          ACC="${{ steps.search_user.outputs.account_id }}"
+
+          echo "🔍 Checking if user is assignable for $ISSUE..."
+
+          curl -sS \
             -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-            "${{ secrets.JIRA_URL }}/rest/api/3/issue/${{ inputs.issue_key }}?fields=assignee,status,summary"
-          )
-          
-          if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "::error::Issue ${{ inputs.issue_key }} not found or inaccessible (HTTP $HTTP_CODE)"
-            cat issue.json || true
+            "${{ secrets.JIRA_URL }}/rest/api/3/user/assignable/search?issueKey=$ISSUE" \
+            -o assignable.json
+
+          # Check whether accountId appears
+          MATCH=$(jq --arg acc "$ACC" '.[] | select(.accountId == $acc)' assignable.json || true)
+
+          if [[ -z "$MATCH" ]]; then
+            echo "::error::User exists but cannot be assigned issues in this project or workflow state"
             echo ""
-            echo "💡 Tip: Verify the issue key is correct and you have permission to access it"
+            echo "Possible reasons:"
+            echo " - User is not in project roles"
+            echo " - User lacks 'Assign Issues' permission"
+            echo " - Workflow state prevents assignment"
             exit 1
           fi
-          
-          # Extract issue details
-          SUMMARY=$(jq -r '.fields.summary // "Unknown"' issue.json)
-          STATUS=$(jq -r '.fields.status.name // "Unknown"' issue.json)
-          CURRENT_ASSIGNEE_ID=$(jq -r '.fields.assignee.accountId // empty' issue.json)
-          CURRENT_ASSIGNEE_NAME=$(jq -r '.fields.assignee.displayName // "Unassigned"' issue.json)
-          
-          echo "✅ Issue found: ${{ inputs.issue_key }}"
-          echo "   Summary: $SUMMARY"
-          echo "   Status: $STATUS"
-          echo "   Current Assignee: $CURRENT_ASSIGNEE_NAME"
-          
-          echo "current_assignee_id=$CURRENT_ASSIGNEE_ID" >> $GITHUB_OUTPUT
-          echo "current_assignee_name=$CURRENT_ASSIGNEE_NAME" >> $GITHUB_OUTPUT
-          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          
-          rm -f issue.json
 
-      - name: Check if reassignment needed
-        id: check_assignment
-        run: |
-          ACCOUNT_ID="${{ steps.lookup_user.outputs.account_id }}"
-          CURRENT_ASSIGNEE_ID="${{ steps.verify_issue.outputs.current_assignee_id }}"
-          
-          if [[ "$ACCOUNT_ID" == "$CURRENT_ASSIGNEE_ID" ]]; then
-            echo "ℹ️ Issue ${{ inputs.issue_key }} is already assigned to ${{ steps.lookup_user.outputs.display_name }}"
-            echo "needs_assignment=false" >> $GITHUB_OUTPUT
-          else
-            echo "📝 Issue needs reassignment"
-            echo "   From: ${{ steps.verify_issue.outputs.current_assignee_name }}"
-            echo "   To: ${{ steps.lookup_user.outputs.display_name }}"
-            echo "needs_assignment=true" >> $GITHUB_OUTPUT
-          fi
+          echo "✅ User is assignable"
 
       - name: Assign Jira issue
-        if: steps.check_assignment.outputs.needs_assignment == 'true'
         run: |
           set -euo pipefail
-          ACCOUNT_ID="${{ steps.lookup_user.outputs.account_id }}"
-          
-          # Build JSON payload
-          PAYLOAD=$(jq -n --arg acc "$ACCOUNT_ID" '{accountId: $acc}')
-          
-          echo "📌 Assigning issue ${{ inputs.issue_key }} → ${{ steps.lookup_user.outputs.display_name }}"
-          
-          HTTP_CODE=$(curl --silent --write-out "%{http_code}" --output assign_response.json \
-            --retry 3 --retry-delay 2 \
+          ISSUE="${{ inputs.issue_key }}"
+          ACC="${{ steps.search_user.outputs.account_id }}"
+          NAME="${{ steps.search_user.outputs.display_name }}"
+
+          PAYLOAD=$(jq -n --arg acc "$ACC" '{accountId: $acc}')
+
+          echo "📌 Assigning $ISSUE → $NAME"
+
+          # Try PUT first
+          HTTP=$(curl -sS -w "%{http_code}" -o resp.json \
             -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             -X PUT \
             -H "Content-Type: application/json" \
             --data "$PAYLOAD" \
-            "${{ secrets.JIRA_URL }}/rest/api/3/issue/${{ inputs.issue_key }}/assignee"
+            "${{ secrets.JIRA_URL }}/rest/api/3/issue/$ISSUE/assignee"
           )
-          
-          if [[ "$HTTP_CODE" != "204" ]]; then
-            echo "::error::Assignment failed (HTTP $HTTP_CODE)"
-            cat assign_response.json || true
-            echo ""
-            echo "💡 Tip: Verify you have permission to assign issues in this project"
-            exit 1
-          fi
-          
-          echo "🎉 Successfully assigned ${{ inputs.issue_key }} to ${{ steps.lookup_user.outputs.display_name }}"
-          
-          rm -f assign_response.json
 
-      - name: Build summary
-        if: always()
-        run: |
-          echo "### 📋 Jira Assignment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Issue:** [${{ inputs.issue_key }}](${{ secrets.JIRA_URL }}/browse/${{ inputs.issue_key }})" >> $GITHUB_STEP_SUMMARY
-          echo "**Summary:** ${{ steps.verify_issue.outputs.summary }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** ${{ steps.verify_issue.outputs.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ "${{ steps.check_assignment.outputs.needs_assignment }}" == "true" ]]; then
-            echo "**Result:** ✅ Assigned to ${{ steps.lookup_user.outputs.display_name }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Result:** ℹ️ Already assigned to ${{ steps.lookup_user.outputs.display_name }}" >> $GITHUB_STEP_SUMMARY
+          if [[ "$HTTP" == "204" ]]; then
+            echo "🎉 Successfully assigned using PUT"
+            exit 0
           fi
+
+          if [[ "$HTTP" == "405" ]]; then
+            echo "⚠️ PUT not allowed — retrying with POST..."
+            HTTP2=$(curl -sS -w "%{http_code}" -o resp.json \
+              -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+              -X POST \
+              -H "Content-Type: application/json" \
+              --data "$PAYLOAD" \
+              "${{ secrets.JIRA_URL }}/rest/api/3/issue/$ISSUE/assignee"
+            )
+
+            if [[ "$HTTP2" == "204" ]]; then
+              echo "🎉 Successfully assigned using POST"
+              exit 0
+            fi
+          fi
+
+          echo "::error::Failed to assign issue (HTTP $HTTP)"
+          cat resp.json
+          exit 1
