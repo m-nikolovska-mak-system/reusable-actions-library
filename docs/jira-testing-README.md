@@ -1,5 +1,3 @@
-Got it! Here’s a concise README draft for your **Mega Jira Workflow** with brief explanation and proper links to the reusable workflows:
-
 ---
 
 # 🚀 Mega Jira Workflow
