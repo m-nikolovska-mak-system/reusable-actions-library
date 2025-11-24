@@ -2,7 +2,7 @@
 
 This reusable GitHub Actions workflow assigns a Jira issue to a specific user based on their email address. It resolves the email to a Jira `accountId` and updates the issue using the Jira REST API.
 
-**File:** [`.github/workflows/assign-jira-ticket.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/assign-jira-ticket
+**File:** [`.github/workflows/assign-jira-ticket.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/assign-jira-ticket.yml
 
 ---
 
