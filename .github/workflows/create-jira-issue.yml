@@ -53,13 +53,11 @@ jobs:
             --arg sum "$SUMMARY" \
             --arg desc "$DESCRIPTION" \
             --arg type "$TYPE" \
-            --arg reporter "${{ secrets.JIRA_EMAIL }}" \
             '{
               fields: {
                 project: { key: $proj },
                 summary: $sum,
                 issuetype: { name: $type },
-                reporter: { emailAddress: $reporter },
                 description: {
                   type: "doc",
                   version: 1,
