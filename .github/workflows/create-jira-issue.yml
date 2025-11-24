@@ -1,4 +1,5 @@
-# Create Jira Issue (Reusable, Enterprise Friendly)
+name: Create Jira Issue
+
 on:
   workflow_call:
     inputs:
@@ -19,6 +20,7 @@ on:
         description: "Description of the Jira issue (optional)"
         required: false
         type: string
+        default: ""
     secrets:
       JIRA_EMAIL:
         required: true
@@ -29,57 +31,142 @@ on:
 
     outputs:
       issue_key:
-        description: "Generated Jira issue key (ex: ERP-123)"
+        description: "Generated Jira issue key (e.g., ERP-123)"
         value: ${{ jobs.create-jira.outputs.issue_key }}
+      issue_url:
+        description: "Direct URL to the created Jira issue"
+        value: ${{ jobs.create-jira.outputs.issue_url }}
 
 jobs:
   create-jira:
     runs-on: ubuntu-latest
+    name: Create Jira Issue
     outputs:
       issue_key: ${{ steps.create.outputs.issue_key }}
+      issue_url: ${{ steps.create.outputs.issue_url }}
 
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y jq curl python3
-
-      - name: Validate inputs
+      - name: Validate inputs and secrets
         run: |
           set -euo pipefail
-
-          # Project key
-          if [[ ! "${{ inputs.project_key }}" =~ ^[A-Z]+$ ]]; then
-            echo "::error::Invalid project key '${{ inputs.project_key }}'. Use something like 'ERP'."
+          echo "🔍 Validating inputs and secrets..."
+          
+          # Validate secrets
+          if [[ -z "${{ secrets.JIRA_EMAIL }}" ]]; then
+            echo "::error::JIRA_EMAIL secret is missing"
             exit 1
           fi
-
-          # Summary
+          
+          if [[ -z "${{ secrets.JIRA_API_TOKEN }}" ]]; then
+            echo "::error::JIRA_API_TOKEN secret is missing"
+            exit 1
+          fi
+          
+          if [[ -z "${{ secrets.JIRA_URL }}" ]]; then
+            echo "::error::JIRA_URL secret is missing"
+            exit 1
+          fi
+          
+          # Validate project key format (letters only, uppercase)
+          if ! [[ "${{ inputs.project_key }}" =~ ^[A-Z][A-Z0-9]*$ ]]; then
+            echo "::error::Invalid project key '${{ inputs.project_key }}'. Must start with uppercase letter (e.g., ERP, PROJ)"
+            exit 1
+          fi
+          
+          # Validate summary not empty
           if [[ -z "${{ inputs.summary }}" ]]; then
             echo "::error::Summary cannot be empty"
             exit 1
           fi
-
-          # Issue type
-          ISSUE_TYPE="${{ inputs.issuetype }}"
-          if [[ -z "$ISSUE_TYPE" ]]; then
-            ISSUE_TYPE="Task"
+          
+          # Validate issue type not empty
+          if [[ -z "${{ inputs.issuetype }}" ]]; then
+            echo "::error::Issue type cannot be empty"
+            exit 1
           fi
+          
+          echo "✅ All validations passed"
 
-          echo "✅ Input validation passed"
+      - name: Verify project exists
+        id: verify_project
+        run: |
+          set -euo pipefail
+          echo "🔍 Verifying project ${{ inputs.project_key }} exists..."
+          
+          HTTP_CODE=$(curl --silent --write-out "%{http_code}" --output project.json \
+            --retry 3 --retry-delay 2 \
+            -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            "${{ secrets.JIRA_URL }}/rest/api/3/project/${{ inputs.project_key }}"
+          )
+          
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::Project ${{ inputs.project_key }} not found or inaccessible (HTTP $HTTP_CODE)"
+            cat project.json || true
+            echo ""
+            echo "💡 Tip: Verify project key is correct and you have access"
+            exit 1
+          fi
+          
+          PROJECT_NAME=$(jq -r '.name // "Unknown"' project.json)
+          echo "✅ Project found: $PROJECT_NAME"
+          echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
+          
+          rm -f project.json
+
+      - name: Verify issue type is valid
+        run: |
+          set -euo pipefail
+          echo "🔍 Verifying issue type '${{ inputs.issuetype }}' is valid for project..."
+          
+          HTTP_CODE=$(curl --silent --write-out "%{http_code}" --output createmeta.json \
+            --retry 3 --retry-delay 2 \
+            -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            "${{ secrets.JIRA_URL }}/rest/api/3/issue/createmeta?projectKeys=${{ inputs.project_key }}&expand=projects.issuetypes"
+          )
+          
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::Failed to get project metadata (HTTP $HTTP_CODE)"
+            cat createmeta.json || true
+            exit 1
+          fi
+          
+          # Check if issue type exists
+          ISSUE_TYPE_EXISTS=$(jq --arg type "${{ inputs.issuetype }}" \
+            '.projects[0].issuetypes[]? | select(.name == $type) | .name' \
+            createmeta.json || echo "")
+          
+          if [[ -z "$ISSUE_TYPE_EXISTS" ]]; then
+            echo "::error::Issue type '${{ inputs.issuetype }}' not found in project ${{ inputs.project_key }}"
+            echo ""
+            echo "Available issue types:"
+            jq -r '.projects[0].issuetypes[]?.name' createmeta.json || echo "None"
+            echo ""
+            echo "💡 Tip: Use one of the available types above"
+            exit 1
+          fi
+          
+          echo "✅ Issue type '${{ inputs.issuetype }}' is valid"
+          
+          rm -f createmeta.json
 
       - name: Create Jira issue
         id: create
         run: |
           set -euo pipefail
-
+          
           SUMMARY="${{ inputs.summary }}"
-          DESCRIPTION="${{ inputs.desc:-}}"
+          DESCRIPTION="${{ inputs.desc }}"
           PROJECT="${{ inputs.project_key }}"
           TYPE="${{ inputs.issuetype }}"
-
-          # Build payload
+          
+          echo "📝 Creating Jira issue..."
+          echo "   Project: $PROJECT"
+          echo "   Type: $TYPE"
+          echo "   Summary: $SUMMARY"
+          
+          # Build payload - conditionally include description
           if [[ -n "$DESCRIPTION" ]]; then
+            echo "   Description: Present"
             PAYLOAD=$(jq -n \
               --arg proj "$PROJECT" \
               --arg sum "$SUMMARY" \
@@ -100,6 +187,7 @@ jobs:
                 }
               }')
           else
+            echo "   Description: None"
             PAYLOAD=$(jq -n \
               --arg proj "$PROJECT" \
               --arg sum "$SUMMARY" \
@@ -112,46 +200,63 @@ jobs:
                 }
               }')
           fi
+          
+          # Create issue with retry logic
+          HTTP_CODE=$(curl --silent --write-out "%{http_code}" --output response.json \
+            --retry 3 --retry-delay 2 \
+            -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            --data "$PAYLOAD" \
+            "${{ secrets.JIRA_URL }}/rest/api/3/issue"
+          )
+          
+          if [[ "$HTTP_CODE" != "201" ]]; then
+            echo "::error::Failed to create Jira issue (HTTP $HTTP_CODE)"
+            cat response.json || true
+            echo ""
+            echo "💡 Tip: Check if you have 'Create Issues' permission in this project"
+            exit 1
+          fi
+          
+          ISSUE_KEY=$(jq -r '.key // empty' response.json)
+          ISSUE_ID=$(jq -r '.id // empty' response.json)
+          ISSUE_URL="${{ secrets.JIRA_URL }}/browse/$ISSUE_KEY"
+          
+          if [[ -z "$ISSUE_KEY" ]]; then
+            echo "::error::Issue created but key not found in response"
+            cat response.json
+            exit 1
+          fi
+          
+          echo "✅ Jira issue created successfully!"
+          echo "   Issue Key: $ISSUE_KEY"
+          echo "   Issue ID: $ISSUE_ID"
+          echo "   URL: $ISSUE_URL"
+          
+          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+          echo "issue_url=$ISSUE_URL" >> $GITHUB_OUTPUT
+          
+          rm -f response.json
 
-          echo "🔹 Payload prepared (sensitive info hidden)"
-
-          # Retry logic
-          MAX_RETRIES=3
-          RETRY_DELAY=5
-          for i in $(seq 1 $MAX_RETRIES); do
-            HTTP_STATUS=$(curl -sS -D /tmp/headers -o response.json \
-              -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -X POST \
-              --data "$PAYLOAD" \
-              --max-time 30 \
-              "${{ secrets.JIRA_URL }}/rest/api/3/issue" \
-              -w "%{http_code}")
-
-            if [[ "$HTTP_STATUS" == "201" ]]; then
-              ISSUE_KEY=$(jq -r '.key' response.json)
-              echo "✅ Jira issue created: $ISSUE_KEY"
-              echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
-              break
-            else
-              echo "⚠️ Attempt $i failed with HTTP $HTTP_STATUS"
-              cat response.json
-              if [[ "$i" -lt "$MAX_RETRIES" ]]; then
-                echo "⏳ Retrying in $RETRY_DELAY seconds..."
-                sleep $RETRY_DELAY
-              else
-                echo "::error::Failed to create Jira issue after $MAX_RETRIES attempts"
-                cat /tmp/headers
-                exit 1
-              fi
-            fi
-          done
-
-      - name: Add build summary
+      - name: Build summary
+        if: always()
         run: |
-          echo "### ✅ Jira Issue Created Successfully" >> $GITHUB_STEP_SUMMARY
-          echo "- Project: ${{ inputs.project_key }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Issue Type: ${{ inputs.issuetype }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Summary: ${{ inputs.summary }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Description: ${{ inputs.desc }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Issue Key: ${{ steps.create.outputs.issue_key }}" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Jira Issue Creation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ -n "${{ steps.create.outputs.issue_key }}" ]]; then
+            echo "**Status:** ✅ Created successfully" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Issue:** [${{ steps.create.outputs.issue_key }}](${{ steps.create.outputs.issue_url }})" >> $GITHUB_STEP_SUMMARY
+            echo "**Project:** ${{ inputs.project_key }} (${{ steps.verify_project.outputs.project_name }})" >> $GITHUB_STEP_SUMMARY
+            echo "**Type:** ${{ inputs.issuetype }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Summary:** ${{ inputs.summary }}" >> $GITHUB_STEP_SUMMARY
+            if [[ -n "${{ inputs.desc }}" ]]; then
+              echo "**Description:** Yes" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "**Status:** ❌ Failed to create issue" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Check logs above for details" >> $GITHUB_STEP_SUMMARY
+          fi
