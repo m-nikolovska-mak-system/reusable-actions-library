@@ -1,18 +1,22 @@
-# Create Jira Issue (Reusable)
+# Create Jira Issue (Reusable, Enterprise Friendly)
 on:
   workflow_call:
     inputs:
       project_key:
+        description: "Jira project key (e.g., ERP)"
         required: true
         type: string
       issuetype:
+        description: "Type of Jira issue (default: Task)"
         required: false
         default: "Task"
         type: string
       summary:
+        description: "Summary of the Jira issue"
         required: true
         type: string
-      description:
+      desc:
+        description: "Description of the Jira issue (optional)"
         required: false
         type: string
     secrets:
@@ -22,7 +26,6 @@ on:
         required: true
       JIRA_URL:
         required: true
-
 
     outputs:
       issue_key:
@@ -35,71 +38,120 @@ jobs:
     outputs:
       issue_key: ${{ steps.create.outputs.issue_key }}
 
-
-    
     steps:
-      - name: Install jq
-        run: sudo apt-get update -y && sudo apt-get install -y jq
-
-
-      - name: Validate project key
+      - name: Install dependencies
         run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq curl python3
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+
+          # Project key
           if [[ ! "${{ inputs.project_key }}" =~ ^[A-Z]+$ ]]; then
-            echo "❌ Invalid project key '${{ inputs.project_key }}'."
-            echo "👉 Expected something like 'ERP', not 'ERP-28'."
+            echo "::error::Invalid project key '${{ inputs.project_key }}'. Use something like 'ERP'."
             exit 1
           fi
-      
+
+          # Summary
+          if [[ -z "${{ inputs.summary }}" ]]; then
+            echo "::error::Summary cannot be empty"
+            exit 1
+          fi
+
+          # Issue type
+          ISSUE_TYPE="${{ inputs.issuetype }}"
+          if [[ -z "$ISSUE_TYPE" ]]; then
+            ISSUE_TYPE="Task"
+          fi
+
+          echo "✅ Input validation passed"
 
       - name: Create Jira issue
         id: create
         run: |
+          set -euo pipefail
+
           SUMMARY="${{ inputs.summary }}"
-          DESCRIPTION="${{ inputs.description }}"
+          DESCRIPTION="${{ inputs.desc:-}}"
           PROJECT="${{ inputs.project_key }}"
           TYPE="${{ inputs.issuetype }}"
 
-          PAYLOAD=$(jq -n \
-            --arg proj "$PROJECT" \
-            --arg sum "$SUMMARY" \
-            --arg desc "$DESCRIPTION" \
-            --arg type "$TYPE" \
-            '{
-              fields: {
-                project: { key: $proj },
-                summary: $sum,
-                issuetype: { name: $type },
-                description: {
-                  type: "doc",
-                  version: 1,
-                  content: [
-                    { type: "paragraph", content: [ { type: "text", text: $desc } ] }
-                  ]
+          # Build payload
+          if [[ -n "$DESCRIPTION" ]]; then
+            PAYLOAD=$(jq -n \
+              --arg proj "$PROJECT" \
+              --arg sum "$SUMMARY" \
+              --arg desc "$DESCRIPTION" \
+              --arg type "$TYPE" \
+              '{
+                fields: {
+                  project: { key: $proj },
+                  summary: $sum,
+                  issuetype: { name: $type },
+                  description: {
+                    type: "doc",
+                    version: 1,
+                    content: [
+                      { type: "paragraph", content: [ { type: "text", text: $desc } ] }
+                    ]
+                  }
                 }
-              }
-            }'
-          )
-
-          echo "Request payload:"
-          echo "$PAYLOAD"
-
-          RESPONSE=$(curl -s -D /tmp/headers \
-            -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            --data "$PAYLOAD" \
-            "${{ secrets.JIRA_URL }}/rest/api/3/issue")
-
-          echo "Jira response:"
-          echo "$RESPONSE"
-
-          ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.key // empty')
-
-          if [ -z "$ISSUE_KEY" ]; then
-            echo "::error::Jira issue creation failed"
-            echo "Headers:"
-            cat /tmp/headers
-            exit 1
+              }')
+          else
+            PAYLOAD=$(jq -n \
+              --arg proj "$PROJECT" \
+              --arg sum "$SUMMARY" \
+              --arg type "$TYPE" \
+              '{
+                fields: {
+                  project: { key: $proj },
+                  summary: $sum,
+                  issuetype: { name: $type }
+                }
+              }')
           fi
 
-          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+          echo "🔹 Payload prepared (sensitive info hidden)"
+
+          # Retry logic
+          MAX_RETRIES=3
+          RETRY_DELAY=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            HTTP_STATUS=$(curl -sS -D /tmp/headers -o response.json \
+              -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -X POST \
+              --data "$PAYLOAD" \
+              --max-time 30 \
+              "${{ secrets.JIRA_URL }}/rest/api/3/issue" \
+              -w "%{http_code}")
+
+            if [[ "$HTTP_STATUS" == "201" ]]; then
+              ISSUE_KEY=$(jq -r '.key' response.json)
+              echo "✅ Jira issue created: $ISSUE_KEY"
+              echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+              break
+            else
+              echo "⚠️ Attempt $i failed with HTTP $HTTP_STATUS"
+              cat response.json
+              if [[ "$i" -lt "$MAX_RETRIES" ]]; then
+                echo "⏳ Retrying in $RETRY_DELAY seconds..."
+                sleep $RETRY_DELAY
+              else
+                echo "::error::Failed to create Jira issue after $MAX_RETRIES attempts"
+                cat /tmp/headers
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Add build summary
+        run: |
+          echo "### ✅ Jira Issue Created Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- Project: ${{ inputs.project_key }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Issue Type: ${{ inputs.issuetype }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Summary: ${{ inputs.summary }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Description: ${{ inputs.desc }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Issue Key: ${{ steps.create.outputs.issue_key }}" >> $GITHUB_STEP_SUMMARY
