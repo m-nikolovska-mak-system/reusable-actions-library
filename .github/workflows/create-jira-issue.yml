@@ -30,6 +30,16 @@ jobs:
       - name: Install jq
         run: sudo apt-get update -y && sudo apt-get install -y jq
 
+
+      - name: Validate project key
+        run: |
+          if [[ ! "${{ inputs.project_key }}" =~ ^[A-Z]+$ ]]; then
+            echo "❌ Invalid project key '${{ inputs.project_key }}'."
+            echo "👉 Expected something like 'ERP', not 'ERP-28'."
+            exit 1
+          fi
+      
+
       - name: Create Jira issue
         id: create
         run: |
