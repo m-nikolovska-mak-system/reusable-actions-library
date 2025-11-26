@@ -1,0 +1,67 @@
+name: Generate Workflow Documentation
+
+on:
+  workflow_call:
+    inputs:
+      workflow_dir:
+        description: "Directory containing workflow files"
+        required: false
+        default: ".github/workflows"
+        type: string
+      output_dir:
+        description: "Directory for generated docs"
+        required: false
+        default: "docs/workflows"
+        type: string
+      branch_name:
+        description: "Branch name for PR"
+        required: false
+        default: "auto-doc/update-workflow-readmes"
+        type: string
+      base_branch:
+        description: "Base branch for PR"
+        required: false
+        default: "main"
+        type: string
+
+jobs:
+  generate-docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Create script directory
+        run: mkdir -p scripts
+
+      - name: Download doc generation script
+        run: |
+          curl -o scripts/generate-workflow-docs.js \
+            https://raw.githubusercontent.com/m-nikolovska-mak-system/reusable-actions-library/main/.github/scripts/generate-workflow-docs.js
+
+      - name: Install dependencies
+        run: npm install fs-extra js-yaml
+
+      - name: Generate workflow docs
+        run: node scripts/generate-workflow-docs.js
+        env:
+          WORKFLOW_DIR: ${{ inputs.workflow_dir }}
+          OUTPUT_DIR: ${{ inputs.output_dir }}
+
+      - name: Create Pull Request for updated workflow docs
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "docs: auto-update workflow READMEs"
+          title: "docs: auto-update workflow READMEs"
+          body: "This PR updates the documentation for workflows in .github/workflows."
+          branch: ${{ inputs.branch_name }}
+          base: ${{ inputs.base_branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
