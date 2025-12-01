@@ -1,0 +1,116 @@
+name: Auto-Generate Workflow Documentation (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      template_path:
+        required: true
+        type: string
+      python_script:
+        required: true
+        type: string
+      branch_prefix:
+        required: false
+        type: string
+        default: "auto-doc/update-readme"
+    secrets:
+      USER_TOKEN:
+        required: true
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.prep_matrix.outputs.matrix }}
+      has_changes: ${{ steps.prep_matrix.outputs.has_changes }}
+      pr_source_branch: ${{ steps.get_source_branch.outputs.pr_source_branch }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect changed workflows
+        id: detect
+        uses: tj-actions/changed-files@v44
+        with:
+          files: |
+            .github/workflows/*.yml
+            .github/workflows/*.yaml
+            !.github/workflows/new-ci-readme-docs.yml
+
+      - name: Prepare matrix JSON
+        id: prep_matrix
+        run: |
+          if [ "${{ steps.detect.outputs.any_changed }}" == "false" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "matrix=[]" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          json="[]"
+          for f in ${{ steps.detect.outputs.all_changed_files }}; do
+            base=$(basename "$f")
+            base="${base%.yml}"
+            base="${base%.yaml}"
+            json=$(echo "$json" | jq --arg wf "$f" --arg b "$base" '. += [{"workflow":$wf,"basename":$b}]')
+          done
+
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "matrix=$(echo "$json" | jq -c '.')" >> $GITHUB_OUTPUT
+
+      - name: Get PR source branch
+        id: get_source_branch
+        run: echo "pr_source_branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+
+  update-doc:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        item: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.USER_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install pyyaml
+      - run: mkdir -p docs
+
+      - name: Create missing README
+        run: |
+          TEMPLATE="${{ inputs.template_path }}"
+          README="docs/README-${{ matrix.item.basename }}.md"
+          if [ ! -f "$README" ]; then
+            cp "$TEMPLATE" "$README"
+            sed -i "/^## Usage$/a Documentation for workflow ${{ matrix.item.basename }}." "$README"
+          fi
+
+      - name: Generate documentation
+        run: |
+          python3 ${{ inputs.python_script }} \
+            "${{ matrix.item.workflow }}" \
+            "docs/README-${{ matrix.item.basename }}.md"
+
+      - uses: tj-actions/verify-changed-files@v19
+        id: verify
+        with:
+          files: docs/README-${{ matrix.item.basename }}.md
+
+      - uses: peter-evans/create-pull-request@v6
+        if: steps.verify.outputs.files_changed == 'true'
+        with:
+          commit-message: "docs: auto-update README for ${{ matrix.item.basename }}"
+          title: "docs: auto-update README for ${{ matrix.item.basename }}"
+          body: |
+            This PR updates the documentation for:
+            **${{ matrix.item.basename }}**
+          branch: "${{ inputs.branch_prefix }}-${{ matrix.item.basename }}"
+          committer: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+          token: ${{ secrets.USER_TOKEN }}
+          base: ${{ needs.detect-changes.outputs.pr_source_branch || github.event.pull_request.base.ref }}
+          delete-branch: true
