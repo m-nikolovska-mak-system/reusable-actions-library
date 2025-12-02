@@ -1,0 +1,97 @@
+name: Sync Docs to Confluence (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      space-key:
+        description: "Confluence space key"
+        required: true
+        type: string
+      parent-page-id:
+        description: "Parent page ID in Confluence"
+        required: true
+        type: string
+    secrets:
+      confluence_user:
+        required: true
+      confluence_api_token:
+        required: true
+
+jobs:
+  sync-docs:
+    runs-on: ubuntu-latest
+
+    concurrency:
+      group: confluence-sync
+      cancel-in-progress: false
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Detect changed files
+        id: changed_files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: docs/**
+
+      - name: Check if docs changed
+        id: check_changes
+        run: |
+          if [ "${{ steps.changed_files.outputs.any_changed }}" == "true" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Docs changed!"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes in docs/"
+          fi
+
+      - name: List changed docs
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          echo "Changed docs files:"
+          echo "${{ steps.changed_files.outputs.all_changed_files }}"
+
+      - name: Warn on renamed/moved files
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          if [ -n "${{ steps.changed_files.outputs.renamed_files }}" ]; then
+            echo "::warning::Some files were renamed or moved. Confluence may create duplicates."
+            echo "${{ steps.changed_files.outputs.renamed_files }}"
+          fi
+
+      - name: Verify docs folder exists
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          if [ ! -d "docs" ]; then
+            echo "Error: docs/ folder not found"
+            exit 1
+          fi
+          if [ -z "$(ls -A docs)" ]; then
+            echo "Error: docs/ folder is empty"
+            exit 1
+          fi
+
+      - name: Publish Docs to Confluence
+        if: steps.check_changes.outputs.changed == 'true'
+        uses: Bhacaz/docs-as-code-confluence@v3
+        with:
+          folder: docs
+          username: ${{ secrets.confluence_user }}
+          password: ${{ secrets.confluence_api_token }}
+          confluence-base-url: https://mihaelanikolovska183014.atlassian.net/wiki
+          space-key: ${{ inputs.space-key }}
+          parent-page-id: ${{ inputs.parent-page-id }}
+
+      - name: Notify success
+        if: steps.check_changes.outputs.changed == 'true' && success()
+        run: echo "::notice::Confluence sync completed successfully ✅"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Confluence sync failed."
+          echo "::notice::You may need to manually sync docs to Confluence"
