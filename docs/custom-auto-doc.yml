@@ -1,0 +1,78 @@
+---
+
+# 📝 Auto-Generate Workflow Documentation — Reusable Workflow
+
+**File:** [`.github/workflows/custom-auto-doc.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/custom-auto-doc.yml)
+Reusable workflow that detects changed workflow files and automatically generates or updates their corresponding documentation in `docs/README-<workflow>.md`.
+
+---
+
+## 🎯 What This Does
+
+This workflow keeps your workflow documentation always up to date by:
+
+* Detecting which workflow files were modified
+* Creating documentation pages if they don’t already exist
+* Running a Python script to generate or update README content
+* Opening an automated pull request with the updated documentation
+
+**What you give it:**
+
+* A Markdown template
+* A Python generator script
+* (Optionally) a custom branch prefix
+* A GitHub token with write permissions
+
+**What you get back:**
+
+* 📄 Newly created or updated workflow documentation
+* 🔁 Automatic pull requests containing the updates
+
+---
+
+## 📥 Inputs (What You Customize)
+
+| Input           | Type   | Required? | Purpose                                                | Example                             |
+| --------------- | ------ | --------- | ------------------------------------------------------ | ----------------------------------- |
+| `template_path` | string | ✅ YES     | Path to the README template used when generating pages | `.github/docs/workflow-template.md` |
+| `python_script` | string | ✅ YES     | Script that reads workflow YAML and outputs Markdown   | `.github/scripts/generate-docs.py`  |
+| `branch_prefix` | string | ❌ No      | Prefix for auto-generated PR branches                  | `auto-doc/update-readme`            |
+
+---
+
+## 🔒 Secrets (Required)
+
+| Secret       | What It Is                                                   |
+| ------------ | ------------------------------------------------------------ |
+| `USER_TOKEN` | GitHub token with permissions to push changes and create PRs |
+
+---
+
+## 🧠 How It Works
+
+1. Detects changed workflow files (`*.yml` / `*.yaml`)
+2. Builds a job matrix for each changed file
+3. Creates missing README files from your template
+4. Updates or rebuilds documentation using your Python script
+5. Opens a pull request for every README that changed
+
+All fully automated.
+
+---
+
+## 💡 Usage Example
+
+```yaml
+jobs:
+  generate_docs:
+    uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/custom-auto-doc.yml@main
+    with:
+      template_path: .github/docs/workflow-template.md
+      python_script: .github/scripts/generate-docs.py
+      branch_prefix: auto-doc/update-readme
+    secrets:
+      USER_TOKEN: ${{ secrets.USER_TOKEN }}
+```
+
+---
+
