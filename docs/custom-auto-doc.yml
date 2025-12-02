@@ -1,4 +1,3 @@
----
 
 # 📝 Auto-Generate Workflow Documentation — Reusable Workflow
 
@@ -74,5 +73,4 @@ jobs:
       USER_TOKEN: ${{ secrets.USER_TOKEN }}
 ```
 
----
 
