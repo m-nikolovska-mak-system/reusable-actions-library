@@ -1,7 +1,9 @@
 # 📘 Sync Docs to Confluence — GitHub Workflow
 
-**File:** `.github/workflows/sync-docs-to-confluence.yml`
-Automates publishing Markdown files from the `docs/` folder into Confluence, with safety checks, rename detection, and concurrency-protected updates.
+File: [.github/workflows/sync-docs-to-confluence.yml](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/sync-docs-to-confluence.yml)
+
+Automates publishing Markdown files from the docs/ folder into Confluence, with safety checks, rename detection, and concurrency-protected updates.
+
 
 ---
 
