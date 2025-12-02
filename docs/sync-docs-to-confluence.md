@@ -79,7 +79,7 @@ This handles uploading Markdown to Confluence via REST API and creating/updating
 
 Only runs the sync if *actual* differences exist inside `/docs`.
 
-### ✔ Handles Renamed Files
+### ✔ Identifies Renamed Files
 
 Warns if files were renamed or moved because Confluence might create duplicates.
 
