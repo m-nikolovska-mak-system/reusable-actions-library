@@ -1,17 +1,9 @@
-name: Update Reusable Actions Index
+name: Trigger Confluence DB Update
 
 on:
-  push:
-    paths:
-      - "docs/README-*.md"
-  workflow_dispatch:
+  workflow_dispatch:  
 
 jobs:
-  update_reusables_table:
+  run-update-db:
     uses: m-nikolovska-mak-system/reusable-actions-library/.github/workflows/update-confluence-db.yml@main
-    with:
-      readme_pattern: "docs/README-*.md"
-    secrets:
-      CONFLUENCE_USER: ${{ secrets.CONFLUENCE_USER }}
-      CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
-      CONFLUENCE_PAGE_ID: ${{ secrets.CONFLUENCE_PAGE_ID_REUSABLES }}
+    secrets: inherit
