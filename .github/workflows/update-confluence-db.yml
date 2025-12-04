@@ -1,7 +1,14 @@
 name: Update README Index in Confluence
 
 on:
-  workflow_call:  # Makes it callable by other workflows
+  workflow_call:
+    secrets:
+      CONFLUENCE_USER:
+        required: true
+      CONFLUENCE_API_TOKEN:
+        required: true
+      CONFLUENCE_PAGE_ID:
+        required: true
     inputs:
       readme_pattern:
         description: 'Pattern to match README files'
