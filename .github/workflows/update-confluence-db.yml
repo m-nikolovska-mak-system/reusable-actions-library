@@ -1,25 +1,11 @@
 name: Update README Index in Confluence
 
 on:
-  workflow_call:
-    secrets:
-      CONFLUENCE_USER:
-        required: true
-      CONFLUENCE_API_TOKEN:
-        required: true
-      CONFLUENCE_PAGE_ID:
-        required: true
-    inputs:
-      readme_pattern:
-        description: 'Pattern to match README files'
-        required: false
-        type: string
-        default: 'docs/README-*.md'
   push:
     branches: [main]
     paths:
-      - 'docs/README-*.md'
-  workflow_dispatch:
+      - 'docs/README-*.md'  # Only triggers when README files in docs/ change
+  workflow_dispatch:  # Manual trigger for testing
 
 jobs:
   update-confluence:
@@ -35,10 +21,7 @@ jobs:
         run: |
           echo "Scanning docs folder for README files..."
           
-          # Use input pattern if provided, otherwise default
-          PATTERN="${{ inputs.readme_pattern || 'docs/README-*.md' }}"
-          
-          # Find all matching README files
+          # Find all README-*.md files in docs/
           readmes=$(find docs -type f -name "README-*.md" | sort)
           
           if [ -z "$readmes" ]; then
@@ -90,7 +73,7 @@ jobs:
           
           table+="</tbody></table>"
           
-          # Save to file
+          # Save to file (we'll use this in next step)
           echo "$table" > table.html
           
           readme_count=$(echo "$readmes" | wc -l)
@@ -120,7 +103,7 @@ jobs:
           PAGE_CONTENT="<h1>📚 Workflow Documentation Index</h1>"
           PAGE_CONTENT+="<ac:structured-macro ac:name=\"info\"><ac:rich-text-body>"
           PAGE_CONTENT+="<p>🤖 This page is automatically maintained by GitHub Actions</p>"
-          PAGE_CONTENT+="<p>📅 Last updated: <strong>$(TZ=\"Europe/Skopje\" date '+%Y-%m-%d %H:%M %Z')</strong></p>"
+          PAGE_CONTENT+="<p>📅 Last updated: <strong>$(date -u '+%Y-%m-%d %H:%M UTC')</strong></p>"
           PAGE_CONTENT+="<p>📊 Total workflows documented: <strong>${{ steps.scan.outputs.readme_count }}</strong></p>"
           PAGE_CONTENT+="</ac:rich-text-body></ac:structured-macro>"
           PAGE_CONTENT+="<h2>Workflows</h2>"
@@ -140,6 +123,7 @@ jobs:
               '{
                 version: {number: ($version | tonumber)},
                 type: "page",
+                title: "Workflow Documentation Index",
                 body: {
                   storage: {
                     value: $content,
