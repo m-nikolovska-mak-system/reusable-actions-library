@@ -1,0 +1,152 @@
+name: Update README Index in Confluence
+
+on:
+  workflow_call:  # Makes it callable by other workflows
+    inputs:
+      readme_pattern:
+        description: 'Pattern to match README files'
+        required: false
+        type: string
+        default: 'docs/README-*.md'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/README-*.md'
+  workflow_dispatch:
+
+jobs:
+  update-confluence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan docs folder and build table
+        id: scan
+        run: |
+          echo "Scanning docs folder for README files..."
+          
+          # Use input pattern if provided, otherwise default
+          PATTERN="${{ inputs.readme_pattern || 'docs/README-*.md' }}"
+          
+          # Find all matching README files
+          readmes=$(find docs -type f -name "README-*.md" | sort)
+          
+          if [ -z "$readmes" ]; then
+            echo "No README files found in docs/"
+            exit 0
+          fi
+          
+          # Start building the table HTML
+          table="<table><tbody>"
+          table+="<tr><th>Workflow</th><th>Documentation</th><th>Last Updated</th><th>Git History</th></tr>"
+          
+          # Process each README
+          while IFS= read -r file; do
+            # Extract workflow name from README-workflow-name.md
+            filename=$(basename "$file")
+            workflow_name="${filename#README-}"  # Remove "README-" prefix
+            workflow_name="${workflow_name%.md}" # Remove ".md" suffix
+            
+            # Get last commit date for this file
+            last_updated=$(git log -1 --format="%ai" -- "$file" | cut -d' ' -f1)
+            if [ -z "$last_updated" ]; then
+              last_updated=$(date +%Y-%m-%d)
+            fi
+            
+            # Get last commit message
+            last_commit_msg=$(git log -1 --format="%s" -- "$file" | sed 's/[<>&"]//g' | cut -c1-50)
+            
+            # Build GitHub URLs
+            readme_url="https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/$file"
+            workflow_file=".github/workflows/${workflow_name}.yml"
+            workflow_url="https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/${workflow_file}"
+            history_url="https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}/$file"
+            
+            # Check if workflow file exists
+            if [ -f "$workflow_file" ]; then
+              workflow_link="<a href=\"$workflow_url\">📋 View Workflow</a>"
+            else
+              workflow_link="<em>Workflow file not found</em>"
+            fi
+            
+            # Add row to table
+            table+="<tr>"
+            table+="<td><strong><code>$workflow_name</code></strong><br/>$workflow_link</td>"
+            table+="<td><a href=\"$readme_url\">📖 View README</a></td>"
+            table+="<td>$last_updated<br/><small><em>$last_commit_msg</em></small></td>"
+            table+="<td><a href=\"$history_url\">📜 History</a></td>"
+            table+="</tr>"
+          done <<< "$readmes"
+          
+          table+="</tbody></table>"
+          
+          # Save to file
+          echo "$table" > table.html
+          
+          readme_count=$(echo "$readmes" | wc -l)
+          echo "✅ Table built with $readme_count README files"
+          echo "readme_count=$readme_count" >> $GITHUB_OUTPUT
+
+      - name: Update Confluence page
+        env:
+          BASE: ${{ vars.CONFLUENCE_BASE }}
+          EMAIL: ${{ secrets.CONFLUENCE_USER }}
+          TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          PAGE_ID: ${{ secrets.CONFLUENCE_PAGE_ID }}
+        run: |
+          # Get current page version
+          echo "Getting current page version..."
+          CURRENT_VERSION=$(curl -s -u "$EMAIL:$TOKEN" \
+            "$BASE/wiki/rest/api/content/$PAGE_ID" \
+            | jq -r '.version.number')
+          
+          echo "Current version: $CURRENT_VERSION"
+          NEW_VERSION=$((CURRENT_VERSION + 1))
+          
+          # Read the table HTML
+          TABLE_HTML=$(cat table.html)
+          
+          # Build the full page content with better formatting
+          PAGE_CONTENT="<h1>📚 Workflow Documentation Index</h1>"
+          PAGE_CONTENT+="<ac:structured-macro ac:name=\"info\"><ac:rich-text-body>"
+          PAGE_CONTENT+="<p>🤖 This page is automatically maintained by GitHub Actions</p>"
+          PAGE_CONTENT+="<p>📅 Last updated: <strong>$(date -u '+%Y-%m-%d %H:%M UTC')</strong></p>"
+          PAGE_CONTENT+="<p>📊 Total workflows documented: <strong>${{ steps.scan.outputs.readme_count }}</strong></p>"
+          PAGE_CONTENT+="</ac:rich-text-body></ac:structured-macro>"
+          PAGE_CONTENT+="<h2>Workflows</h2>"
+          PAGE_CONTENT+="$TABLE_HTML"
+          PAGE_CONTENT+="<hr/>"
+          PAGE_CONTENT+="<p><small><em>READMEs are auto-generated when workflow files change. "
+          PAGE_CONTENT+="See <a href=\"https://github.com/${{ github.repository }}/blob/main/.github/workflows/new-ci-readme-docs.yml\">documentation workflow</a> for details.</em></small></p>"
+          
+          # Update the page
+          echo "Updating Confluence page..."
+          RESPONSE=$(curl -s -u "$EMAIL:$TOKEN" \
+            -X PUT "$BASE/wiki/rest/api/content/$PAGE_ID" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg version "$NEW_VERSION" \
+              --arg content "$PAGE_CONTENT" \
+              '{
+                version: {number: ($version | tonumber)},
+                type: "page",
+                title: "Workflow Documentation Index",
+                body: {
+                  storage: {
+                    value: $content,
+                    representation: "storage"
+                  }
+                }
+              }')")
+          
+          if echo "$RESPONSE" | jq -e '.id' > /dev/null; then
+            echo "✅ Confluence page updated successfully!"
+            echo "🔗 View at: $BASE/wiki/spaces/DS/pages/$PAGE_ID"
+          else
+            echo "❌ Failed to update Confluence page"
+            echo "$RESPONSE" | jq .
+            exit 1
+          fi
