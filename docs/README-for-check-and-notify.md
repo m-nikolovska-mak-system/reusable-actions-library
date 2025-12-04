@@ -17,13 +17,13 @@ All workflows follow GitHub’s `workflow_call` pattern and are designed to be c
 Located at:  
 `.github/workflows/3check-file-changes.yml`  
 Documentation:  
-[docs/file-change-detection.md](file-change-detection.md)
+[docs/README-3check-file-changes.md](README-3check-file-changes.md)
 
 ### 2. MS Teams Notifier  
 Located at:  
 `.github/workflows/teams-notifier.yml`  
 Documentation:  
-[`docs/teams-notifier-README.md`](teams-notifier-README.md)
+[docs/README-teams-notifier.md](README-teams-notifier.md)
 
 ---
 
