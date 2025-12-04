@@ -4,7 +4,8 @@ This reusable workflow detects modified files between two Git tags (or releases)
 It is designed for automation pipelines that need to trigger conditional steps—such as notifications, deployments, or artifact generation—only when specific files have changed.
 
 Workflow file:  
-`.github/workflows/3check-file-changes.yml`
+[.github/workflows/3check-file-changes.yml](../.github/workflows/3check-file-changes.yml)
+
 
 ---
 
