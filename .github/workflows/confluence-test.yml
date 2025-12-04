@@ -1,0 +1,66 @@
+name: Confluence test update
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-confluence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build tiny table HTML
+        run: |
+          TABLE_HTML="<table><tr><th>Col1</th><th>Col2</th></tr><tr><td>A</td><td>B</td></tr></table>"
+          echo "TABLE_HTML=$TABLE_HTML" >> $GITHUB_ENV
+
+      - name: Update test Confluence page
+        env:
+          BASE: ${{ vars.CONFLUENCE_BASE }}
+          EMAIL: ${{ secrets.CONFLUENCE_USER }}
+          TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          PAGE_ID: ${{ secrets.CONFLUENCE_PAGE_ID }} # point this to a *test* page
+        run: |
+          echo "Getting current page version and title..."
+          PAGE_JSON=$(curl -s -u "$EMAIL:$TOKEN" \
+            "$BASE/wiki/rest/api/content/$PAGE_ID")
+
+          echo "$PAGE_JSON" | jq .
+
+          CURRENT_VERSION=$(echo "$PAGE_JSON" | jq -r '.version.number')
+          CURRENT_TITLE=$(echo "$PAGE_JSON" | jq -r '.title')
+
+          echo "Current version: $CURRENT_VERSION"
+          echo "Current title: $CURRENT_TITLE"
+
+          NEW_VERSION=$((CURRENT_VERSION + 1))
+
+          PAGE_CONTENT="<h1>Test table from GitHub Actions</h1>$TABLE_HTML"
+
+          echo "Updating Confluence page..."
+          RESPONSE=$(curl -s -u "$EMAIL:$TOKEN" \
+            -X PUT "$BASE/wiki/rest/api/content/$PAGE_ID" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg version "$NEW_VERSION" \
+              --arg title "$CURRENT_TITLE" \
+              --arg content "$PAGE_CONTENT" \
+              '{
+                version: {number: ($version | tonumber)},
+                type: "page",
+                title: $title,
+                body: {
+                  storage: {
+                    value: $content,
+                    representation: "storage"
+                  }
+                }
+              }')")
+
+          echo "Response:"
+          echo "$RESPONSE" | jq .
+
+          if echo "$RESPONSE" | jq -e '.id' > /dev/null; then
+            echo "✅ Test page updated!"
+          else
+            echo "❌ Failed to update Confluence page"
+            exit 1
+          fi
