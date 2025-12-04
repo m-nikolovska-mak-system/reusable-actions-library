@@ -3,6 +3,7 @@
 **File:** [`.github/workflows/update-confluence-db.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/update-confluence-db.yml)
 
 **Type:** Reusable Workflow (Called by other workflows)
+
 **Purpose:** Scans all `docs/README-*.md` files, generates a documentation table, and updates a Confluence page with workflow info.
 
 ---
