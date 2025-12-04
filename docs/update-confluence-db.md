@@ -109,19 +109,6 @@ jobs:
 
 ## ❌ Troubleshooting
 
-### Problem: `cat: table.html: No such file or directory`
-
-**Why it happens:**
-
-* No README files match the pattern
-* Workflow didn’t generate table.html
-
-**How to fix:**
-
-1. Verify README files exist in `docs/`
-2. Check `readme_pattern` input matches file names
-3. Ensure workflow runs after checkout step
-
 ---
 
 ### Problem: Confluence page not updating
