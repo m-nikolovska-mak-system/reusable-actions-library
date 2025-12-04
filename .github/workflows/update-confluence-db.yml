@@ -87,19 +87,22 @@ jobs:
           TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
           PAGE_ID: ${{ secrets.CONFLUENCE_PAGE_ID }}
         run: |
-          # Get current page version
           echo "Getting current page version..."
-          CURRENT_VERSION=$(curl -s -u "$EMAIL:$TOKEN" \
-            "$BASE/wiki/rest/api/content/$PAGE_ID" \
-            | jq -r '.version.number')
-          
+          PAGE_JSON=$(curl -s -u "$EMAIL:$TOKEN" \
+            "$BASE/wiki/rest/api/content/$PAGE_ID")
+      
+          echo "$PAGE_JSON" | jq .
+      
+          CURRENT_VERSION=$(echo "$PAGE_JSON" | jq -r '.version.number')
+          CURRENT_TITLE=$(echo "$PAGE_JSON" | jq -r '.title')
+      
           echo "Current version: $CURRENT_VERSION"
+          echo "Current title: $CURRENT_TITLE"
+      
           NEW_VERSION=$((CURRENT_VERSION + 1))
-          
-          # Read the table HTML
+      
           TABLE_HTML=$(cat table.html)
-          
-          # Build the full page content with better formatting
+      
           PAGE_CONTENT="<h1>📚 Workflow Documentation Index</h1>"
           PAGE_CONTENT+="<ac:structured-macro ac:name=\"info\"><ac:rich-text-body>"
           PAGE_CONTENT+="<p>🤖 This page is automatically maintained by GitHub Actions</p>"
@@ -111,18 +114,19 @@ jobs:
           PAGE_CONTENT+="<hr/>"
           PAGE_CONTENT+="<p><small><em>READMEs are auto-generated when workflow files change. "
           PAGE_CONTENT+="See <a href=\"https://github.com/${{ github.repository }}/blob/main/.github/workflows/new-ci-readme-docs.yml\">documentation workflow</a> for details.</em></small></p>"
-          
-          # Update the page
+      
           echo "Updating Confluence page..."
           RESPONSE=$(curl -s -u "$EMAIL:$TOKEN" \
             -X PUT "$BASE/wiki/rest/api/content/$PAGE_ID" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
               --arg version "$NEW_VERSION" \
+              --arg title "$CURRENT_TITLE" \
               --arg content "$PAGE_CONTENT" \
               '{
                 version: {number: ($version | tonumber)},
                 type: "page",
+                title: $title,
                 body: {
                   storage: {
                     value: $content,
@@ -130,12 +134,13 @@ jobs:
                   }
                 }
               }')")
-          
+      
+          echo "$RESPONSE" | jq .
+      
           if echo "$RESPONSE" | jq -e '.id' > /dev/null; then
             echo "✅ Confluence page updated successfully!"
             echo "🔗 View at: $BASE/wiki/spaces/DS/pages/$PAGE_ID"
           else
             echo "❌ Failed to update Confluence page"
-            echo "$RESPONSE" | jq .
             exit 1
           fi
