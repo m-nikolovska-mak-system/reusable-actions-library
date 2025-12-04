@@ -2,14 +2,14 @@
 
 # 📝 Assign Jira Issue — Reusable Workflow
 
-**File:** [`.github/workflows/assign-jira-issue.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/assign-jira-ticket.yml) — Reusable workflow to safely assign a Jira issue to a user with email validation and assignable check.
+**File:** [`.github/workflows/assign-jira-ticket.yml`](https://github.com/m-nikolovska-mak-system/reusable-actions-library/blob/main/.github/workflows/assign-jira-ticket.yml) — Reusable workflow to safely assign a Jira issue to a user with email validation and assignable check.
 
 
 ---
 
 ## 🎯 What This Does
 
-Assigns a Jira issue to a specified user using the Jira REST API, with:
+Assigns a Jira ticket to a specified user using the Jira REST API, with:
 
 * Input validation for issue key and email
 * User lookup by email
@@ -48,12 +48,12 @@ Assigns a Jira issue to a specified user using the Jira REST API, with:
 
 ## 💡 Usage Examples
 
-### Example 1: Assign an Issue
+### Example 1: Assign an Ticket
 
 ```yaml
 jobs:
   assign_issue:
-    uses: reusable-actions-library/.github/workflows/assign-jira-issue.yml@main
+    uses: reusable-actions-library/.github/workflows/assign-jira-ticket.yml@main
     with:
       issue_key: ERP-123
       assignee_email: john.doe@example.com
