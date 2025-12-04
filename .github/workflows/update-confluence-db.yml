@@ -140,7 +140,6 @@ jobs:
               '{
                 version: {number: ($version | tonumber)},
                 type: "page",
-                title: "Workflow Documentation Index",
                 body: {
                   storage: {
                     value: $content,
