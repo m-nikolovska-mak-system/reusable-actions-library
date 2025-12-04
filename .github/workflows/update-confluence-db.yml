@@ -106,7 +106,7 @@ jobs:
           PAGE_CONTENT="<h1>📚 Workflow Documentation Index</h1>"
           PAGE_CONTENT+="<ac:structured-macro ac:name=\"info\"><ac:rich-text-body>"
           PAGE_CONTENT+="<p>🤖 This page is automatically maintained by GitHub Actions</p>"
-          PAGE_CONTENT+="<p>📅 Last updated: <strong>$(date -u '+%Y-%m-%d %H:%M UTC')</strong></p>"
+          PAGE_CONTENT+="<p>📅 Last updated: <strong>$(TZ='Europe/Berlin' date '+%Y-%m-%d %H:%M %Z')</strong></p>"
           PAGE_CONTENT+="<p>📊 Total workflows documented: <strong>${{ steps.scan.outputs.readme_count }}</strong></p>"
           PAGE_CONTENT+="</ac:rich-text-body></ac:structured-macro>"
           PAGE_CONTENT+="<h2>Workflows</h2>"
