@@ -22,6 +22,12 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install deps for diagram script
+        run: |
+          cd .github
+          npm init -y
+          npm install js-yaml
+
       - name: Generate workflow diagrams
         run: |
           mkdir -p docs/workflows
