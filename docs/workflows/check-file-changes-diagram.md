@@ -1,6 +1,6 @@
 ```mermaid
 graph TD
-  A[📋 Check File Changes (Universal)]
+  A [📋 Check File Changes (Universal)]
   detect[💼 detect]:::green
   detect-s0[🧩 action...]
   detect --> detect-s0
