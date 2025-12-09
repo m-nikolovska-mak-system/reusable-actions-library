@@ -11,6 +11,5 @@ graph TD
   detect-s3[⚙️ Debug output...]
   detect --> detect-s3
 
-    classDef blue fill:#4A90E2
-    classDef green fill:#7ED321
-  
+classDef blue fill:#4A90E2
+classDef green fill:#7ED321
