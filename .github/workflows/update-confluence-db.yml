@@ -35,10 +35,13 @@ jobs:
             [ -e "$wf" ] || continue
             if grep -q "workflow_call" "$wf"; then
               echo "Generating diagram for $wf"
+              base="$(basename "$wf" .yml)"
               node .github/scripts/generate-diagram.js "$wf" \
-                > "docs/workflows/$(basename "$wf" .yml).md"
+                | tee "docs/workflows/${base}-diagram.md"
             fi
           done
+
+
 
       - name: List generated diagrams
         run: |
