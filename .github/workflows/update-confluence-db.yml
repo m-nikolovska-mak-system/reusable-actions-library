@@ -34,11 +34,10 @@ jobs:
 
             if grep -q "workflow_call" "$wf"; then
               echo "Generating diagram for $wf"
-              node ./scripts/generate-diagram.js "$wf" \
+              node .github/scripts/generate-diagram.js "$wf" \
                 > "docs/workflows/$(basename "$wf" .yml).md"
             fi
           done
-
 
       - name: Scan docs folder and build table
         id: scan
