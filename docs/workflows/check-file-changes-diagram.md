@@ -1,6 +1,5 @@
-```mermaid
 graph TD
-  A [📋 Check File Changes (Universal)]
+  A[📋 Check File Changes (Universal)]
   detect[💼 detect]:::green
   detect-s0[🧩 action...]
   detect --> detect-s0
@@ -11,5 +10,5 @@ graph TD
   detect-s3[⚙️ Debug output...]
   detect --> detect-s3
 
-classDef blue fill:#4A90E2
-classDef green fill:#7ED321
+  classDef blue fill:#4A90E2
+  classDef green fill:#7ED321
