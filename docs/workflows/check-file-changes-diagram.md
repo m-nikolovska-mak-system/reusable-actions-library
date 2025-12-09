@@ -1,3 +1,4 @@
+```mermaid
 graph TD
   A[📋 Check File Changes (Universal)]
   detect[💼 detect]:::green
