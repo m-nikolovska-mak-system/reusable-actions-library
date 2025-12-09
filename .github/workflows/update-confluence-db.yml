@@ -17,17 +17,28 @@ jobs:
           fetch-depth: 0
 
 
+      - name: Setup Node.js for diagram script
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Generate workflow diagrams
-        if: steps.check_changes.outputs.changed == 'true'
         run: |
-          # For each reusable workflow, parse YAML and generate Mermaid
+          mkdir -p docs/workflows
+
+          chmod +x ./scripts/generate-diagram.js || true
+
           for wf in .github/workflows/*.yml; do
+            # Skip if no match (bash glob edge case)
+            [ -e "$wf" ] || continue
+
             if grep -q "workflow_call" "$wf"; then
-              # Extract jobs/steps and generate Mermaid diagram
-              ./scripts/generate-diagram.js "$wf" > "docs/workflows/$(basename $wf .yml).md"
+              echo "Generating diagram for $wf"
+              node ./scripts/generate-diagram.js "$wf" \
+                > "docs/workflows/$(basename "$wf" .yml).md"
             fi
           done
-      
+
 
       - name: Scan docs folder and build table
         id: scan
