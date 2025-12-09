@@ -16,28 +16,20 @@ jobs:
         with:
           fetch-depth: 0
 
-
-      - name: Setup Node.js for diagram script
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install deps for diagram script
-        run: |
-          cd .github
-          npm init -y
-          npm install js-yaml
+      - name: Install diagram script deps
+        working-directory: .github
+        run: npm install
 
       - name: Generate workflow diagrams
         run: |
           mkdir -p docs/workflows
-
-          chmod +x .github/scripts/generate-diagram.js || true
-
           for wf in .github/workflows/*.yml; do
-            # Skip if no match (bash glob edge case)
             [ -e "$wf" ] || continue
-
             if grep -q "workflow_call" "$wf"; then
               echo "Generating diagram for $wf"
               node .github/scripts/generate-diagram.js "$wf" \
