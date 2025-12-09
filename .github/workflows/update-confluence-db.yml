@@ -7,6 +7,9 @@ on:
       - 'docs/README-*.md'  # Only triggers when README files in docs/ change
   workflow_dispatch:  # Manual trigger for testing
 
+permissions:
+  contents: write 
+
 jobs:
   update-confluence:
     runs-on: ubuntu-latest
