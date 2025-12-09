@@ -34,3 +34,14 @@ function generateMermaid(workflowPath) {
   
   return mermaid;
 }
+
+// ---- CLI entrypoint ----
+if (require.main === module) {
+  const wfPath = process.argv[2];
+  if (!wfPath) {
+    console.error('Usage: node generate-diagram.js <workflow-file>');
+    process.exit(1);
+  }
+  const diagram = generateMermaid(wfPath);
+  process.stdout.write(diagram);
+}
