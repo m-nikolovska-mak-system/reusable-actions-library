@@ -16,6 +16,19 @@ jobs:
         with:
           fetch-depth: 0
 
+
+      - name: Generate workflow diagrams
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          # For each reusable workflow, parse YAML and generate Mermaid
+          for wf in .github/workflows/*.yml; do
+            if grep -q "workflow_call" "$wf"; then
+              # Extract jobs/steps and generate Mermaid diagram
+              ./scripts/generate-diagram.js "$wf" > "docs/workflows/$(basename $wf .yml).md"
+            fi
+          done
+      
+
       - name: Scan docs folder and build table
         id: scan
         run: |
