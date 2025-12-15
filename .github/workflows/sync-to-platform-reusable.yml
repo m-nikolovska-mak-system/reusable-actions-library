@@ -1,0 +1,386 @@
+# ========================================
+# Sync Files to Platform Repository (REUSABLE)
+# ========================================
+# Version: 1.0
+# Purpose: Synchronizes specific files from product repos to a platform repo on release
+# Last Updated: 2025-01-21
+#
+# This reusable workflow:
+# 1. Detects changed files between releases (or syncs all specified files)
+# 2. Copies specified files/folders to destination repository
+# 3. Preserves directory structure in destination
+# 4. Creates matching release tags in destination repo
+# 5. Commits and pushes changes
+#
+# Usage:
+# Call this workflow from your product repo's .github/workflows/sync.yml
+# Configure which files to sync and where they go
+# ========================================
+
+name: Sync Files to Platform (Reusable)
+
+# ========== WORKFLOW CONFIGURATION ==========
+on:
+  workflow_call:
+    inputs:
+      # ────────────────────────────────────
+      # SOURCE CONFIGURATION
+      # ────────────────────────────────────
+      
+      source_files:
+        description: |
+          Files/folders to sync (one per line). Supports wildcards.
+          Examples:
+            src/main/**
+            config/*.yml
+            README.md
+          Leave empty to sync ALL changed files since last release.
+        required: false
+        type: string
+        default: ''
+      
+      sync_mode:
+        description: |
+          Sync strategy:
+          - 'changed': Only files changed since last release (default)
+          - 'all': All files matching source_files pattern
+        required: false
+        type: string
+        default: 'changed'
+      
+      # ────────────────────────────────────
+      # DESTINATION CONFIGURATION
+      # ────────────────────────────────────
+      
+      destination_repo:
+        description: |
+          Destination repository in format: owner/repo-name
+          Example: m-nikolovska-mak-system/platform-repo
+        required: true
+        type: string
+      
+      destination_path:
+        description: |
+          Root path in destination repo where files will be copied.
+          Examples:
+            '' (empty = root directory)
+            'products/my-app'
+            'shared/components'
+        required: false
+        type: string
+        default: ''
+      
+      preserve_structure:
+        description: |
+          Whether to preserve source directory structure in destination.
+          - true: src/main/App.java → destination_path/src/main/App.java
+          - false: src/main/App.java → destination_path/App.java (flattened)
+        required: false
+        type: boolean
+        default: true
+      
+      # ────────────────────────────────────
+      # TAGGING & COMMIT CONFIGURATION
+      # ────────────────────────────────────
+      
+      create_tag:
+        description: 'Create matching release tag in destination repo'
+        required: false
+        type: boolean
+        default: true
+      
+      tag_prefix:
+        description: |
+          Prefix for tags in destination repo.
+          Example: 'myapp-' → creates tag 'myapp-v1.2.3'
+          Leave empty to use same tag as source.
+        required: false
+        type: string
+        default: ''
+      
+      commit_message_template:
+        description: |
+          Commit message template. Available variables:
+          - {tag}: Release tag name
+          - {repo}: Source repository name
+          - {files}: Number of files synced
+        required: false
+        type: string
+        default: 'Sync from {repo} release {tag}'
+      
+      # ────────────────────────────────────
+      # AUTHENTICATION
+      # ────────────────────────────────────
+    
+    secrets:
+      destination_token:
+        description: |
+          Personal Access Token (PAT) with write access to destination repo.
+          Required permissions: repo (full control)
+          Setup: Settings → Secrets → Actions → New repository secret
+        required: true
+
+# ========== PIPELINE JOBS ==========
+jobs:
+  sync-files:
+    name: Sync Files to Platform
+    runs-on: ubuntu-latest
+    
+    steps:
+      # ─────────────────────────────────────
+      # STEP 1: CHECKOUT SOURCE REPOSITORY
+      # ─────────────────────────────────────
+      - name: Checkout Source Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  
+          path: source
+      
+      # ─────────────────────────────────────
+      # STEP 2: CHECKOUT DESTINATION REPOSITORY
+      # ─────────────────────────────────────
+      - name: Checkout Destination Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.destination_repo }}
+          token: ${{ secrets.destination_token }}
+          fetch-depth: 0
+          path: destination
+      
+      # ─────────────────────────────────────
+      # STEP 3: DETECT FILES TO SYNC
+      # ─────────────────────────────────────
+      - name: Detect Files to Sync
+        id: detect
+        working-directory: source
+        run: |
+          echo "🔍 Detecting files to sync..."
+          
+          # ────────────────────────────────────
+          # DETECT CHANGED FILES (changed mode)
+          # ────────────────────────────────────
+          if [ "${{ inputs.sync_mode }}" == "changed" ]; then
+            echo "Mode: Sync changed files since last release"
+            
+            git fetch --tags
+            LATEST="${{ github.event.release.tag_name }}"
+            
+            # Find previous release tag
+            PREVIOUS=$(git describe --tags --abbrev=0 ${LATEST}^ 2>/dev/null || echo "")
+            
+            if [ -z "$PREVIOUS" ]; then
+              echo "⚠️  No previous release found. Syncing all files."
+              # First release - get all tracked files
+              git ls-files > files_to_sync.txt
+            else
+              echo "Previous tag: $PREVIOUS"
+              echo "Latest tag: $LATEST"
+              # Get changed files between releases
+              git diff --name-only $PREVIOUS $LATEST > files_to_sync.txt
+            fi
+          
+          # ────────────────────────────────────
+          # SYNC ALL MATCHING FILES (all mode)
+          # ────────────────────────────────────
+          else
+            echo "Mode: Sync all specified files"
+            
+            # If source_files specified, use pattern matching
+            if [ -n "${{ inputs.source_files }}" ]; then
+              echo "${{ inputs.source_files }}" | while IFS= read -r pattern; do
+                if [ -n "$pattern" ]; then
+                  git ls-files "$pattern" >> files_to_sync.txt
+                fi
+              done
+            else
+              # No pattern specified - sync everything
+              git ls-files > files_to_sync.txt
+            fi
+          fi
+          
+          # ────────────────────────────────────
+          # FILTER FILES IF PATTERN PROVIDED
+          # ────────────────────────────────────
+          if [ -n "${{ inputs.source_files }}" ] && [ "${{ inputs.sync_mode }}" == "changed" ]; then
+            echo "📋 Filtering files by pattern..."
+            
+            # Create temporary filtered list
+            > filtered_files.txt
+            
+            # Apply each pattern as filter
+            echo "${{ inputs.source_files }}" | while IFS= read -r pattern; do
+              if [ -n "$pattern" ]; then
+                grep -E "^${pattern//\*/.*}$" files_to_sync.txt >> filtered_files.txt || true
+              fi
+            done
+            
+            mv filtered_files.txt files_to_sync.txt
+          fi
+          
+          # Remove duplicates and empty lines
+          sort -u files_to_sync.txt | grep -v '^$' > files_to_sync_clean.txt || true
+          mv files_to_sync_clean.txt files_to_sync.txt
+          
+          # ────────────────────────────────────
+          # OUTPUT RESULTS
+          # ────────────────────────────────────
+          FILE_COUNT=$(wc -l < files_to_sync.txt)
+          echo "✅ Found $FILE_COUNT files to sync"
+          
+          if [ $FILE_COUNT -eq 0 ]; then
+            echo "⚠️  No files to sync. Exiting."
+            echo "has_files=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "has_files=true" >> $GITHUB_OUTPUT
+          echo "file_count=$FILE_COUNT" >> $GITHUB_OUTPUT
+          
+          # Store file list for next step
+          echo "FILES_TO_SYNC<<EOF" >> $GITHUB_ENV
+          cat files_to_sync.txt >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
+          echo ""
+          echo "Files to sync:"
+          cat files_to_sync.txt
+      
+      # ─────────────────────────────────────
+      # STEP 4: COPY FILES TO DESTINATION
+      # ─────────────────────────────────────
+      - name: Copy Files to Destination
+        if: steps.detect.outputs.has_files == 'true'
+        run: |
+          echo "📦 Copying files to destination repository..."
+          
+          cd source
+          
+          # Prepare destination base path
+          DEST_BASE="../destination"
+          if [ -n "${{ inputs.destination_path }}" ]; then
+            DEST_BASE="$DEST_BASE/${{ inputs.destination_path }}"
+            mkdir -p "$DEST_BASE"
+          fi
+          
+          # Copy each file
+          COPIED=0
+          FAILED=0
+          
+          while IFS= read -r file; do
+            if [ -z "$file" ]; then
+              continue
+            fi
+            
+            # Check if file exists
+            if [ ! -f "$file" ]; then
+              echo "⚠️  File not found: $file"
+              FAILED=$((FAILED + 1))
+              continue
+            fi
+            
+            # Determine destination path
+            if [ "${{ inputs.preserve_structure }}" == "true" ]; then
+              # Preserve directory structure
+              DEST_FILE="$DEST_BASE/$file"
+              DEST_DIR=$(dirname "$DEST_FILE")
+            else
+              # Flatten structure
+              FILE_NAME=$(basename "$file")
+              DEST_FILE="$DEST_BASE/$FILE_NAME"
+              DEST_DIR="$DEST_BASE"
+            fi
+            
+            # Create destination directory
+            mkdir -p "$DEST_DIR"
+            
+            # Copy file
+            cp "$file" "$DEST_FILE"
+            echo "✓ Copied: $file → $DEST_FILE"
+            COPIED=$((COPIED + 1))
+            
+          done <<< "$FILES_TO_SYNC"
+          
+          echo ""
+          echo "📊 Summary:"
+          echo "  ✅ Copied: $COPIED files"
+          echo "  ❌ Failed: $FAILED files"
+          
+          if [ $COPIED -eq 0 ]; then
+            echo "::error::No files were copied successfully"
+            exit 1
+          fi
+      
+      # ─────────────────────────────────────
+      # STEP 5: COMMIT CHANGES
+      # ─────────────────────────────────────
+      - name: Commit Changes to Destination
+        if: steps.detect.outputs.has_files == 'true'
+        working-directory: destination
+        run: |
+          echo "💾 Committing changes..."
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add .
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "ℹ️  No changes detected. Files may already be in sync."
+            exit 0
+          fi
+          
+          # Build commit message from template
+          COMMIT_MSG="${{ inputs.commit_message_template }}"
+          COMMIT_MSG="${COMMIT_MSG//\{tag\}/${{ github.event.release.tag_name }}}"
+          COMMIT_MSG="${COMMIT_MSG//\{repo\}/${{ github.repository }}}"
+          COMMIT_MSG="${COMMIT_MSG//\{files\}/${{ steps.detect.outputs.file_count }}}"
+          
+          git commit -m "$COMMIT_MSG"
+          git push
+          
+          echo "✅ Changes committed and pushed"
+      
+      # ─────────────────────────────────────
+      # STEP 6: CREATE RELEASE TAG
+      # ─────────────────────────────────────
+      - name: Create Release Tag in Destination
+        if: steps.detect.outputs.has_files == 'true' && inputs.create_tag == true
+        working-directory: destination
+        run: |
+          echo "🏷️  Creating release tag..."
+          
+          # Build tag name
+          TAG_NAME="${{ inputs.tag_prefix }}${{ github.event.release.tag_name }}"
+          
+          # Check if tag already exists
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "⚠️  Tag '$TAG_NAME' already exists in destination repo"
+            exit 0
+          fi
+          
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+          
+          echo "✅ Tag '$TAG_NAME' created and pushed"
+      
+      # ─────────────────────────────────────
+      # STEP 7: SUMMARY
+      # ─────────────────────────────────────
+      - name: Create Summary
+        if: always()
+        run: |
+          echo "## 🔄 File Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Destination Repository:** ${{ inputs.destination_repo }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Release Tag:** ${{ github.event.release.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Sync Mode:** ${{ inputs.sync_mode }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.detect.outputs.has_files }}" == "true" ]; then
+            echo "✅ **Files Synced:** ${{ steps.detect.outputs.file_count }}" >> $GITHUB_STEP_SUMMARY
+            echo "📁 **Destination Path:** \`${{ inputs.destination_path || '/' }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No files to sync" >> $GITHUB_STEP_SUMMARY
+          fi
